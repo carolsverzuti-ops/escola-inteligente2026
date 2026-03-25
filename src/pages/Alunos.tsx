@@ -1,0 +1,273 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
+import { Plus, Edit2, Trash2, Search, Upload, Download, UserPlus, X } from 'lucide-react';
+import { PageHeader, FilterBar, TableContainer, EmptyState, LoadingSpinner } from '@/components/ui-escola';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+
+interface Aluno {
+  id: string;
+  turma_id: string;
+  nome: string;
+  numero_chamada: number;
+  serie?: string;
+  data_nascimento?: string;
+  email?: string;
+  telefone?: string;
+  responsavel?: string;
+  observacoes?: string;
+  ativo: boolean;
+  turmas?: { nome: string; serie: string };
+}
+
+export default function Alunos() {
+  const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [turmas, setTurmas] = useState<{ id: string; nome: string; serie: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [filterTurma, setFilterTurma] = useState('all');
+  const [filterAtivo, setFilterAtivo] = useState('ativo');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingAluno, setEditingAluno] = useState<Aluno | null>(null);
+  const [form, setForm] = useState({ turma_id: '', nome: '', numero_chamada: 1, serie: '', email: '', telefone: '', responsavel: '', observacoes: '', ativo: true });
+  const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
+
+  useEffect(() => { loadData(); }, []);
+
+  async function loadData() {
+    const [{ data: alunosData }, { data: turmasData }] = await Promise.all([
+      supabase.from('alunos').select('*, turmas(nome, serie)').order('turmas(nome)', { ascending: true }),
+      supabase.from('turmas').select('id, nome, serie').order('nome'),
+    ]);
+    setAlunos(alunosData as Aluno[] || []);
+    setTurmas(turmasData || []);
+    setLoading(false);
+  }
+
+  function openNew() {
+    setEditingAluno(null);
+    setForm({ turma_id: '', nome: '', numero_chamada: 1, serie: '', email: '', telefone: '', responsavel: '', observacoes: '', ativo: true });
+    setDialogOpen(true);
+  }
+
+  function openEdit(a: Aluno) {
+    setEditingAluno(a);
+    setForm({ turma_id: a.turma_id, nome: a.nome, numero_chamada: a.numero_chamada || 1, serie: a.serie || '', email: a.email || '', telefone: a.telefone || '', responsavel: a.responsavel || '', observacoes: a.observacoes || '', ativo: a.ativo });
+    setDialogOpen(true);
+  }
+
+  async function save() {
+    if (!form.nome || !form.turma_id) return toast({ title: 'Preencha nome e turma', variant: 'destructive' });
+    setSaving(true);
+    const turma = turmas.find(t => t.id === form.turma_id);
+    const payload = { ...form, serie: form.serie || turma?.serie || '' };
+    if (editingAluno) {
+      await supabase.from('alunos').update(payload).eq('id', editingAluno.id);
+      toast({ title: 'Aluno atualizado!' });
+    } else {
+      await supabase.from('alunos').insert(payload);
+      toast({ title: 'Aluno cadastrado!' });
+    }
+    setSaving(false);
+    setDialogOpen(false);
+    loadData();
+  }
+
+  async function remove(id: string) {
+    if (!confirm('Excluir este aluno?')) return;
+    await supabase.from('alunos').delete().eq('id', id);
+    toast({ title: 'Aluno excluído' });
+    loadData();
+  }
+
+  function downloadModelo() {
+    const csv = 'Nome Completo,Número Chamada,Turma,Série,Email,Telefone,Responsável,Observações\nAna Silva,1,7º A,7º Ano,ana@email.com,(11)99999-9999,Maria Silva,';
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'modelo_importacao_alunos.csv'; a.click();
+  }
+
+  function exportarAlunos() {
+    const header = 'Número,Nome,Turma,Série,Email,Telefone,Responsável\n';
+    const rows = filtered.map(a =>
+      `${a.numero_chamada},"${a.nome}","${a.turmas?.nome || ''}","${a.serie || ''}","${a.email || ''}","${a.telefone || ''}","${a.responsavel || ''}"`
+    ).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'lista_alunos.csv'; a.click();
+  }
+
+  async function importarCSV(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const lines = text.trim().split('\n').slice(1);
+    const inserts: any[] = [];
+    for (const line of lines) {
+      const cols = line.split(',');
+      if (!cols[0]) continue;
+      const turma = turmas.find(t => t.nome.toLowerCase() === (cols[2] || '').trim().toLowerCase());
+      inserts.push({ nome: cols[0].trim(), numero_chamada: parseInt(cols[1]) || 0, turma_id: turma?.id || null, serie: cols[3]?.trim() || '', email: cols[4]?.trim() || '', telefone: cols[5]?.trim() || '', responsavel: cols[6]?.trim() || '' });
+    }
+    if (inserts.length > 0) {
+      await supabase.from('alunos').insert(inserts);
+      toast({ title: `${inserts.length} alunos importados!` });
+      loadData();
+    }
+  }
+
+  const filtered = alunos.filter(a => {
+    const matchSearch = a.nome.toLowerCase().includes(search.toLowerCase()) || String(a.numero_chamada).includes(search);
+    const matchTurma = filterTurma === 'all' || a.turma_id === filterTurma;
+    const matchAtivo = filterAtivo === 'all' || (filterAtivo === 'ativo' ? a.ativo : !a.ativo);
+    return matchSearch && matchTurma && matchAtivo;
+  });
+
+  return (
+    <div className="animate-fade-in">
+      <PageHeader title="Alunos" subtitle={`${filtered.length} de ${alunos.length} alunos`}>
+        <Button variant="outline" size="sm" onClick={downloadModelo}><Download className="w-4 h-4 mr-1.5" />Modelo CSV</Button>
+        <Button variant="outline" size="sm" onClick={exportarAlunos}><Download className="w-4 h-4 mr-1.5" />Exportar</Button>
+        <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}><Upload className="w-4 h-4 mr-1.5" />Importar CSV</Button>
+        <input ref={fileRef} type="file" accept=".csv,.xlsx" className="hidden" onChange={importarCSV} />
+        <Button size="sm" onClick={openNew}><Plus className="w-4 h-4 mr-1.5" />Novo Aluno</Button>
+      </PageHeader>
+
+      <FilterBar>
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input placeholder="Buscar por nome ou número..." className="pl-8 h-8 text-sm bg-background" value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <Select value={filterTurma} onValueChange={setFilterTurma}>
+          <SelectTrigger className="w-36 h-8 text-sm bg-background"><SelectValue placeholder="Turma" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todas turmas</SelectItem>
+            {turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={filterAtivo} onValueChange={setFilterAtivo}>
+          <SelectTrigger className="w-28 h-8 text-sm bg-background"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ativo">Ativos</SelectItem>
+            <SelectItem value="inativo">Inativos</SelectItem>
+            <SelectItem value="all">Todos</SelectItem>
+          </SelectContent>
+        </Select>
+      </FilterBar>
+
+      {loading ? <LoadingSpinner /> : (
+        <TableContainer>
+          <table className="table-sheet">
+            <thead>
+              <tr>
+                <th className="w-12 text-center">Nº</th>
+                <th>Nome Completo</th>
+                <th>Turma</th>
+                <th>Série</th>
+                <th>Responsável</th>
+                <th>Telefone</th>
+                <th>Status</th>
+                <th className="w-20 text-center">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={8} className="py-12 text-center text-muted-foreground">Nenhum aluno encontrado</td></tr>
+              ) : filtered.map((aluno, i) => (
+                <tr key={aluno.id} className={cn(i % 2 === 0 ? '' : 'bg-muted/20')}>
+                  <td className="text-center font-mono text-sm font-semibold text-muted-foreground">{aluno.numero_chamada}</td>
+                  <td className="font-medium">{aluno.nome}</td>
+                  <td><Badge variant="outline" className="text-xs">{aluno.turmas?.nome}</Badge></td>
+                  <td className="text-sm text-muted-foreground">{aluno.serie}</td>
+                  <td className="text-sm">{aluno.responsavel || '—'}</td>
+                  <td className="text-sm">{aluno.telefone || '—'}</td>
+                  <td>
+                    <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', aluno.ativo ? 'bg-success-light text-success' : 'bg-secondary text-muted-foreground')}>
+                      {aluno.ativo ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="flex items-center justify-center gap-1">
+                      <button onClick={() => openEdit(aluno)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
+                        <Edit2 className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => remove(aluno.id)} className="p-1 rounded hover:bg-danger-light text-muted-foreground hover:text-destructive transition-colors">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableContainer>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{editingAluno ? 'Editar Aluno' : 'Novo Aluno'}</DialogTitle></DialogHeader>
+          <div className="grid gap-3 py-2">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="col-span-2 space-y-1.5">
+                <Label>Nome Completo *</Label>
+                <Input placeholder="Nome completo" value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Nº Chamada</Label>
+                <Input type="number" value={form.numero_chamada} onChange={e => setForm({ ...form, numero_chamada: Number(e.target.value) })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Turma *</Label>
+                <Select value={form.turma_id} onValueChange={v => setForm({ ...form, turma_id: v })}>
+                  <SelectTrigger><SelectValue placeholder="Selecionar turma" /></SelectTrigger>
+                  <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Série</Label>
+                <Input placeholder="Ex: 7º Ano" value={form.serie} onChange={e => setForm({ ...form, serie: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Responsável</Label>
+                <Input placeholder="Nome do responsável" value={form.responsavel} onChange={e => setForm({ ...form, responsavel: e.target.value })} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Telefone</Label>
+                <Input placeholder="(11) 99999-9999" value={form.telefone} onChange={e => setForm({ ...form, telefone: e.target.value })} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>E-mail</Label>
+              <Input placeholder="email@exemplo.com" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Observações</Label>
+              <Textarea placeholder="Observações..." value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })} rows={2} />
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="ativo" checked={form.ativo} onChange={e => setForm({ ...form, ativo: e.target.checked })} className="rounded" />
+              <Label htmlFor="ativo">Aluno ativo</Label>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={save} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
