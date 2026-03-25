@@ -1,17 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import { Plus, CheckCircle, XCircle, AlertCircle, ScanLine, Download } from 'lucide-react';
-import { PageHeader, FilterBar, LoadingSpinner, EmptyState } from '@/components/ui-escola';
+import { supabase } from '@/integrations/supabase/client';
+import { Plus, QrCode, ScanLine, Download, Printer, FileText } from 'lucide-react';
+import { PageHeader, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { QRCodeSVG } from 'qrcode.react';
+import { ProvaFormDialog } from '@/components/correcao/ProvaFormDialog';
+import { GabaritoEditor } from '@/components/correcao/GabaritoEditor';
+import { FolhaRespostasTemplate } from '@/components/correcao/FolhaRespostasTemplate';
+import { EscaneamentoDialog } from '@/components/correcao/EscaneamentoDialog';
+import { ResultadosTable } from '@/components/correcao/ResultadosTable';
 
-const ALTERNATIVAS = ['A', 'B', 'C', 'D', 'E'];
+const DEFAULT_FORM = {
+  turma_id: '', disciplina_id: '', bimestre: 1,
+  titulo: '', numero_questoes: 10, data_aplicacao: new Date().toISOString().split('T')[0],
+  valor_total: 10, observacoes: '', escola: '', professor: '',
+};
 
 export default function CorrecaoProvas() {
   const [provas, setProvas] = useState<any[]>([]);
@@ -23,8 +29,10 @@ export default function CorrecaoProvas() {
   const [respostas, setRespostas] = useState<Record<string, Record<number, string>>>({});
   const [loading, setLoading] = useState(false);
   const [dialogProva, setDialogProva] = useState(false);
-  const [formProva, setFormProva] = useState({ turma_id: '', disciplina_id: '', bimestre: 1, titulo: '', numero_questoes: 10, data_aplicacao: new Date().toISOString().split('T')[0] });
+  const [dialogScan, setDialogScan] = useState(false);
+  const [formProva, setFormProva] = useState({ ...DEFAULT_FORM });
   const [gabForm, setGabForm] = useState<Record<number, string>>({});
+  const [anuladas, setAnuladas] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -37,7 +45,9 @@ export default function CorrecaoProvas() {
       supabase.from('turmas').select('id, nome').order('nome'),
       supabase.from('disciplinas').select('id, nome').order('nome'),
     ]);
-    setProvas(p || []); setTurmas(t || []); setDisciplinas(d || []);
+    setProvas(p || []);
+    setTurmas(t || []);
+    setDisciplinas(d || []);
   }
 
   async function loadProvaDetails() {
@@ -53,6 +63,8 @@ export default function CorrecaoProvas() {
     const gabMap: Record<number, string> = {};
     (gab || []).forEach((g: any) => { gabMap[g.numero_questao] = g.resposta_correta; });
     setGabForm(gabMap);
+    const anuladasList: number[] = (gab || []).filter((g: any) => g.anulada).map((g: any) => g.numero_questao);
+    setAnuladas(anuladasList);
     const resMap: Record<string, Record<number, string>> = {};
     (res || []).forEach((r: any) => { resMap[r.aluno_id] = r.respostas || {}; });
     setRespostas(resMap);
@@ -60,193 +72,246 @@ export default function CorrecaoProvas() {
   }
 
   async function salvarGabarito() {
-    const upserts = Object.entries(gabForm).map(([q, r]) => ({ prova_id: selectedProva.id, numero_questao: parseInt(q), resposta_correta: r, peso: 1.0 }));
-    await supabase.from('gabaritos').upsert(upserts, { onConflict: 'prova_id,numero_questao' });
-    toast({ title: 'Gabarito salvo!' });
+    if (!selectedProva) return;
+    const questoes = Array.from({ length: selectedProva.numero_questoes }, (_, i) => i + 1);
+    const upserts = questoes.map(q => ({
+      prova_id: selectedProva.id,
+      numero_questao: q,
+      resposta_correta: gabForm[q] || 'A',
+      anulada: anuladas.includes(q),
+      peso: 1.0,
+    }));
+    const { error } = await supabase.from('gabaritos').upsert(upserts, { onConflict: 'prova_id,numero_questao' });
+    if (error) { toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: 'Gabarito salvo com sucesso!' });
     loadProvaDetails();
-  }
-
-  async function salvarRespostas(alunoId: string) {
-    const resAl = respostas[alunoId] || {};
-    let acertos = 0;
-    gabarito.forEach(g => { if (resAl[g.numero_questao] === g.resposta_correta) acertos++; });
-    const nota = gabarito.length > 0 ? (acertos / gabarito.length) * 10 : 0;
-    await supabase.from('resultados_prova').upsert({ prova_id: selectedProva.id, aluno_id: alunoId, respostas: resAl, acertos, nota }, { onConflict: 'prova_id,aluno_id' });
-    toast({ title: `Nota ${nota.toFixed(1)} salva!` });
   }
 
   async function criarProva() {
     setSaving(true);
-    const { data } = await supabase.from('provas').insert({ ...formProva, disciplina_id: formProva.disciplina_id || null }).select().single();
-    setSaving(false); setDialogProva(false);
-    if (data) { loadData(); setSelectedProva(data); }
-    toast({ title: 'Prova criada!' });
+    const { data, error } = await supabase.from('provas').insert({
+      turma_id: formProva.turma_id || null,
+      disciplina_id: formProva.disciplina_id || null,
+      bimestre: formProva.bimestre,
+      titulo: formProva.titulo,
+      numero_questoes: formProva.numero_questoes,
+      data_aplicacao: formProva.data_aplicacao || null,
+      observacoes: formProva.observacoes || null,
+    }).select().single();
+    setSaving(false);
+    setDialogProva(false);
+    if (error) { toast({ title: 'Erro ao criar prova', description: error.message, variant: 'destructive' }); return; }
+    if (data) {
+      await loadData();
+      setSelectedProva({ ...data, turmas: turmas.find(t => t.id === formProva.turma_id), disciplinas: disciplinas.find(d => d.id === formProva.disciplina_id) });
+    }
+    setFormProva({ ...DEFAULT_FORM });
+    toast({ title: 'Prova criada!', description: 'Agora configure o gabarito e imprima as folhas.' });
   }
 
-  function downloadModeloCartao() {
-    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Cartão Resposta</title><style>body{font-family:Arial;margin:20px}h2{text-align:center}table{width:100%;border-collapse:collapse;margin-top:10px}td,th{border:1px solid #333;padding:8px;text-align:center;width:60px}th{background:#eee}.resp{display:inline-block;width:28px;height:28px;border:2px solid #333;border-radius:50%;line-height:26px;font-weight:bold;margin:2px;cursor:pointer}</style></head><body><h2>CARTÃO RESPOSTA</h2><div style="margin:10px 0">Nome: ____________________________ Turma: ________ Data: ________ </div><table><tr><th>Questão</th>${ALTERNATIVAS.map(a=>`<th>${a}</th>`).join('')}</tr>${Array.from({length:20},(_,i)=>`<tr><td>${i+1}</td>${ALTERNATIVAS.map(a=>`<td><div class="resp">${a}</div></td>`).join('')}</tr>`).join('')}</table></body></html>`;
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = 'cartao_resposta.html'; link.click();
+  async function salvarResultadoEscaneamento(alunoId: string, respostasAluno: Record<number, string>, nota: number, acertos: number) {
+    const { error } = await supabase.from('resultados_prova').upsert(
+      { prova_id: selectedProva.id, aluno_id: alunoId, respostas: respostasAluno, acertos, nota },
+      { onConflict: 'prova_id,aluno_id' }
+    );
+    if (error) { toast({ title: 'Erro ao salvar resultado', description: error.message, variant: 'destructive' }); return; }
+    toast({ title: `Nota ${nota.toFixed(1)} lançada!` });
+    setRespostas(r => ({ ...r, [alunoId]: respostasAluno }));
+  }
+
+  function exportarCSV() {
+    if (!selectedProva || alunos.length === 0) return;
+    const questoes = Array.from({ length: selectedProva.numero_questoes }, (_, i) => i + 1);
+    const header = ['Nº Chamada', 'Nome', ...questoes.map(q => `Q${q}`), 'Acertos', 'Nota', 'Situação'];
+    const rows = alunos.map(a => {
+      const resAl = respostas[a.id] || {};
+      let acertos = 0;
+      questoes.forEach(q => { if (anuladas.includes(q) || resAl[q] === gabForm[q]) acertos++; });
+      const nota = questoes.length > 0 ? (acertos / questoes.length) * (selectedProva.valor_total || 10) : 0;
+      const temResp = questoes.some(q => resAl[q]);
+      const situacao = !temResp ? 'Pendente' : nota >= (selectedProva.valor_total * 0.7) ? 'Aprovado' : nota >= (selectedProva.valor_total * 0.5) ? 'Recuperação' : 'Reprovado';
+      return [a.numero_chamada, a.nome, ...questoes.map(q => resAl[q] || ''), acertos, nota.toFixed(1), situacao];
+    });
+    const csv = [header, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `resultados_${selectedProva.titulo.replace(/\s+/g, '_')}.csv`;
+    link.click();
   }
 
   const questoes = selectedProva ? Array.from({ length: selectedProva.numero_questoes }, (_, i) => i + 1) : [];
+  const turmaNome = selectedProva?.turmas?.nome || turmas.find(t => t.id === selectedProva?.turma_id)?.nome || '';
+  const disciplinaNome = selectedProva?.disciplinas?.nome || disciplinas.find(d => d.id === selectedProva?.disciplina_id)?.nome || '';
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Correção de Provas" subtitle="Gabarito e lançamento de respostas">
-        <Button variant="outline" size="sm" onClick={downloadModeloCartao}><Download className="w-4 h-4 mr-1.5" />Modelo Cartão</Button>
-        <Button size="sm" onClick={() => setDialogProva(true)}><Plus className="w-4 h-4 mr-1.5" />Nova Prova</Button>
+      <PageHeader title="Correção de Provas" subtitle="Sistema de correção automática por QR Code">
+        {selectedProva && (
+          <Button size="sm" variant="outline" onClick={() => setDialogScan(true)} className="gap-1.5">
+            <ScanLine className="w-4 h-4" />Escanear Folha
+          </Button>
+        )}
+        <Button size="sm" onClick={() => setDialogProva(true)} className="gap-1.5">
+          <Plus className="w-4 h-4" />Nova Prova
+        </Button>
       </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* Lista de provas */}
         <div className="bg-card border border-border rounded-xl shadow-card">
-          <div className="px-4 py-3 border-b border-border"><h2 className="font-semibold text-sm">Provas Cadastradas</h2></div>
+          <div className="px-4 py-3 border-b border-border">
+            <h2 className="font-semibold text-sm">Provas Cadastradas</h2>
+            <p className="text-xs text-muted-foreground">{provas.length} prova{provas.length !== 1 ? 's' : ''}</p>
+          </div>
           <div className="divide-y divide-border/50">
-            {provas.length === 0 ? <p className="text-xs text-muted-foreground p-4 text-center">Nenhuma prova</p>
-            : provas.map(p => (
-              <button key={p.id} onClick={() => setSelectedProva(p)} className={cn('w-full px-4 py-3 text-left hover:bg-secondary/50 transition-colors', selectedProva?.id === p.id ? 'bg-primary-light/30 border-l-2 border-primary' : '')}>
-                <p className="text-sm font-medium leading-tight truncate">{p.titulo}</p>
-                <p className="text-xs text-muted-foreground">{p.turmas?.nome} · {p.bimestre}º Bim · {p.numero_questoes} questões</p>
+            {provas.length === 0 ? (
+              <p className="text-xs text-muted-foreground p-4 text-center">Nenhuma prova criada</p>
+            ) : provas.map(p => (
+              <button key={p.id} onClick={() => setSelectedProva(p)}
+                className={cn('w-full px-4 py-3 text-left hover:bg-secondary/50 transition-colors',
+                  selectedProva?.id === p.id ? 'bg-primary/5 border-l-2 border-primary' : '')}>
+                <div className="flex items-start gap-2">
+                  <QrCode className={cn('w-4 h-4 mt-0.5 flex-shrink-0', selectedProva?.id === p.id ? 'text-primary' : 'text-muted-foreground/50')} />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium leading-tight truncate">{p.titulo}</p>
+                    <p className="text-xs text-muted-foreground">{p.turmas?.nome} · {p.bimestre}º Bim</p>
+                    <p className="text-xs text-muted-foreground">{p.numero_questoes} questões · Valor: {p.valor_total || 10} pts</p>
+                  </div>
+                </div>
               </button>
             ))}
           </div>
         </div>
 
-        {/* Detalhes da prova selecionada */}
+        {/* Detalhes */}
         <div className="lg:col-span-3">
           {!selectedProva ? (
-            <div className="flex flex-col items-center justify-center py-24 bg-card border border-border rounded-xl text-center">
-              <ScanLine className="w-12 h-12 text-muted-foreground/30 mb-3" />
-              <p className="text-muted-foreground">Selecione uma prova para configurar o gabarito</p>
+            <div className="flex flex-col items-center justify-center py-24 bg-card border border-border rounded-xl text-center gap-3">
+              <QrCode className="w-16 h-16 text-muted-foreground/20" />
+              <div>
+                <p className="font-medium text-foreground">Selecione ou crie uma prova</p>
+                <p className="text-sm text-muted-foreground mt-1">Cada prova terá um QR Code único para escaneamento automático</p>
+              </div>
+              <Button size="sm" onClick={() => setDialogProva(true)} className="mt-2 gap-1.5">
+                <Plus className="w-4 h-4" />Criar Primeira Prova
+              </Button>
             </div>
           ) : loading ? <LoadingSpinner /> : (
-            <div className="space-y-4">
-              {/* Gabarito */}
-              <div className="bg-card border border-border rounded-xl shadow-card">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-                  <h2 className="font-semibold text-sm">Gabarito Oficial</h2>
-                  <Button size="sm" variant="outline" onClick={salvarGabarito}>Salvar Gabarito</Button>
+            <Tabs defaultValue="gabarito">
+              <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                <div>
+                  <h2 className="font-bold text-foreground">{selectedProva.titulo}</h2>
+                  <p className="text-xs text-muted-foreground">{turmaNome} · {disciplinaNome} · {selectedProva.bimestre}º Bimestre</p>
                 </div>
-                <div className="p-4 flex flex-wrap gap-2">
-                  {questoes.map(q => (
-                    <div key={q} className="flex flex-col items-center gap-1">
-                      <span className="text-xs font-semibold text-muted-foreground">{q}</span>
-                      <div className="flex gap-0.5">
-                        {ALTERNATIVAS.map(alt => (
-                          <button key={alt} onClick={() => setGabForm(g => ({ ...g, [q]: alt }))}
-                            className={cn('w-7 h-7 text-xs font-bold rounded-full border-2 transition-all', gabForm[q] === alt ? 'bg-primary text-primary-foreground border-primary' : 'border-border text-muted-foreground hover:border-primary/50')}>
-                            {alt}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <TabsList className="h-8">
+                  <TabsTrigger value="gabarito" className="text-xs px-3">Gabarito</TabsTrigger>
+                  <TabsTrigger value="folha" className="text-xs px-3">Folha de Respostas</TabsTrigger>
+                  <TabsTrigger value="resultados" className="text-xs px-3">Resultados</TabsTrigger>
+                </TabsList>
               </div>
 
-              {/* Respostas dos alunos */}
-              <div className="bg-card border border-border rounded-xl shadow-card overflow-hidden">
-                <div className="px-4 py-3 border-b border-border">
-                  <h2 className="font-semibold text-sm">Respostas dos Alunos</h2>
-                  <p className="text-xs text-muted-foreground">Selecione as respostas e salve para calcular a nota automaticamente</p>
+              {/* Gabarito */}
+              <TabsContent value="gabarito" className="mt-0">
+                <GabaritoEditor
+                  questoes={questoes}
+                  gabForm={gabForm}
+                  anuladas={anuladas}
+                  onSelectAlt={(q, alt) => setGabForm(g => ({ ...g, [q]: alt }))}
+                  onToggleAnulada={(q) => setAnuladas(a => a.includes(q) ? a.filter(x => x !== q) : [...a, q])}
+                  onSave={salvarGabarito}
+                  valorTotal={selectedProva.valor_total || 10}
+                />
+                {/* QR Code da prova */}
+                <div className="mt-4 bg-card border border-border rounded-xl p-4 flex items-center gap-6">
+                  <div className="flex flex-col items-center gap-2">
+                    <QRCodeSVG
+                      value={JSON.stringify({ id: selectedProva.id, titulo: selectedProva.titulo, turma: turmaNome, questoes: selectedProva.numero_questoes })}
+                      size={100}
+                      level="M"
+                      className="rounded"
+                    />
+                    <span className="text-xs text-muted-foreground font-semibold">QR Code Único da Prova</span>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold">Como funciona:</p>
+                    <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+                      <li>Configure o gabarito acima e salve</li>
+                      <li>Vá em "Folha de Respostas" e imprima para toda a turma</li>
+                      <li>Os alunos preenchem nome, nº chamada e respostas</li>
+                      <li>Use "Escanear Folha" para corrigir automaticamente</li>
+                      <li>O QR Code identifica a prova; o nº chamada identifica o aluno</li>
+                    </ol>
+                  </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-secondary">
-                        <th className="px-3 py-2 text-left font-semibold text-muted-foreground border-b border-border sticky left-0 bg-secondary z-10 min-w-[150px]">Aluno</th>
-                        {questoes.map(q => <th key={q} className="px-1 py-2 text-center font-semibold text-muted-foreground border-b border-border min-w-[130px]">Q{q}</th>)}
-                        <th className="px-3 py-2 text-center font-semibold text-muted-foreground border-b border-border">Nota</th>
-                        <th className="px-3 py-2 text-center font-semibold text-muted-foreground border-b border-border">Salvar</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {alunos.map((aluno, i) => {
-                        const resAl = respostas[aluno.id] || {};
-                        let acertos = 0;
-                        gabarito.forEach(g => { if (resAl[g.numero_questao] === g.resposta_correta) acertos++; });
-                        const nota = gabarito.length > 0 ? (acertos / gabarito.length) * 10 : null;
-                        return (
-                          <tr key={aluno.id} className={cn(i % 2 ? 'bg-muted/10' : '')}>
-                            <td className="px-3 py-2 sticky left-0 bg-inherit font-medium border-b border-border/40 z-10">{aluno.nome}</td>
-                            {questoes.map(q => (
-                              <td key={q} className="px-1 py-1.5 text-center border-b border-border/40">
-                                <div className="flex gap-0.5 justify-center">
-                                  {ALTERNATIVAS.map(alt => {
-                                    const gab = gabForm[q];
-                                    const sel = resAl[q] === alt;
-                                    const isCorrect = gab && sel && gab === alt;
-                                    const isWrong = gab && sel && gab !== alt;
-                                    return (
-                                      <button key={alt}
-                                        onClick={() => setRespostas(r => ({ ...r, [aluno.id]: { ...r[aluno.id], [q]: alt } }))}
-                                        className={cn('w-6 h-6 text-xs font-bold rounded-full border transition-all',
-                                          isCorrect ? 'bg-success text-success-foreground border-success' :
-                                          isWrong ? 'bg-destructive text-destructive-foreground border-destructive' :
-                                          sel ? 'bg-primary text-primary-foreground border-primary' :
-                                          'border-border text-muted-foreground hover:border-primary/50')}>
-                                        {alt}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              </td>
-                            ))}
-                            <td className={cn('px-3 py-2 text-center font-bold border-b border-border/40', nota !== null ? (nota >= 7 ? 'text-success' : nota >= 5 ? 'text-warning' : 'text-destructive') : 'text-muted-foreground')}>
-                              {nota !== null ? nota.toFixed(1) : '—'}
-                            </td>
-                            <td className="px-3 py-2 text-center border-b border-border/40">
-                              <Button size="sm" variant="outline" className="h-6 text-xs px-2" onClick={() => salvarRespostas(aluno.id)}>Salvar</Button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+              </TabsContent>
+
+              {/* Folha de Respostas para impressão */}
+              <TabsContent value="folha" className="mt-0">
+                <div className="bg-card border border-border rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <FileText className="w-5 h-5 text-primary" />
+                    <div>
+                      <h3 className="font-semibold text-sm">Modelo Único de Folha de Respostas</h3>
+                      <p className="text-xs text-muted-foreground">Imprima este modelo para todos os alunos. O QR Code identifica a prova automaticamente.</p>
+                    </div>
+                  </div>
+                  <FolhaRespostasTemplate
+                    prova={{ ...selectedProva, escola: selectedProva.escola, professor: selectedProva.professor, valor_total: selectedProva.valor_total || 10 }}
+                    turmaNome={turmaNome}
+                    disciplinaNome={disciplinaNome}
+                  />
                 </div>
-              </div>
-            </div>
+              </TabsContent>
+
+              {/* Resultados */}
+              <TabsContent value="resultados" className="mt-0">
+                <div className="flex justify-between items-center mb-3">
+                  <p className="text-xs text-muted-foreground">{alunos.filter(a => respostas[a.id] && Object.keys(respostas[a.id]).length > 0).length} de {alunos.length} alunos lançados</p>
+                  <Button size="sm" onClick={() => setDialogScan(true)} className="gap-1.5 h-8">
+                    <ScanLine className="w-3.5 h-3.5" />Escanear Folha
+                  </Button>
+                </div>
+                <ResultadosTable
+                  alunos={alunos}
+                  gabarito={gabForm}
+                  anuladas={anuladas}
+                  respostas={respostas}
+                  questoes={questoes}
+                  valorTotal={selectedProva.valor_total || 10}
+                  onSalvarAluno={() => {}}
+                  onExportar={exportarCSV}
+                />
+              </TabsContent>
+            </Tabs>
           )}
         </div>
       </div>
 
-      <Dialog open={dialogProva} onOpenChange={setDialogProva}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Nova Prova</DialogTitle></DialogHeader>
-          <div className="grid gap-3 py-2">
-            <div className="space-y-1.5"><Label>Título *</Label><Input placeholder="Ex: Prova Bimestral de Matemática" value={formProva.titulo} onChange={e => setFormProva({ ...formProva, titulo: e.target.value })} /></div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Turma</Label>
-                <Select value={formProva.turma_id} onValueChange={v => setFormProva({ ...formProva, turma_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Turma" /></SelectTrigger>
-                  <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5"><Label>Disciplina</Label>
-                <Select value={formProva.disciplina_id} onValueChange={v => setFormProva({ ...formProva, disciplina_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Disciplina" /></SelectTrigger>
-                  <SelectContent>{disciplinas.map(d => <SelectItem key={d.id} value={d.id}>{d.nome}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5"><Label>Bimestre</Label>
-                <Select value={String(formProva.bimestre)} onValueChange={v => setFormProva({ ...formProva, bimestre: parseInt(v) })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{[1,2,3,4].map(b => <SelectItem key={b} value={String(b)}>{b}º Bim</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5"><Label>Questões</Label><Input type="number" min={1} max={50} value={formProva.numero_questoes} onChange={e => setFormProva({ ...formProva, numero_questoes: parseInt(e.target.value) })} /></div>
-              <div className="space-y-1.5"><Label>Data</Label><Input type="date" value={formProva.data_aplicacao} onChange={e => setFormProva({ ...formProva, data_aplicacao: e.target.value })} /></div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogProva(false)}>Cancelar</Button>
-            <Button onClick={criarProva} disabled={saving}>{saving ? 'Criando...' : 'Criar Prova'}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ProvaFormDialog
+        open={dialogProva}
+        onOpenChange={setDialogProva}
+        form={formProva}
+        onChange={setFormProva}
+        onSave={criarProva}
+        saving={saving}
+        turmas={turmas}
+        disciplinas={disciplinas}
+      />
+
+      {selectedProva && (
+        <EscaneamentoDialog
+          open={dialogScan}
+          onOpenChange={setDialogScan}
+          provas={provas}
+          alunos={alunos}
+          gabarito={gabForm}
+          anuladas={anuladas}
+          valorTotal={selectedProva?.valor_total || 10}
+          onSalvar={salvarResultadoEscaneamento}
+        />
+      )}
     </div>
   );
 }

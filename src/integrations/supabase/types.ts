@@ -327,33 +327,42 @@ export type Database = {
           created_at: string | null
           data_aplicacao: string | null
           disciplina_id: string | null
+          escola: string | null
           id: string
           numero_questoes: number
           observacoes: string | null
+          professor: string | null
           titulo: string
           turma_id: string | null
+          valor_total: number | null
         }
         Insert: {
           bimestre?: number | null
           created_at?: string | null
           data_aplicacao?: string | null
           disciplina_id?: string | null
+          escola?: string | null
           id?: string
           numero_questoes?: number
           observacoes?: string | null
+          professor?: string | null
           titulo: string
           turma_id?: string | null
+          valor_total?: number | null
         }
         Update: {
           bimestre?: number | null
           created_at?: string | null
           data_aplicacao?: string | null
           disciplina_id?: string | null
+          escola?: string | null
           id?: string
           numero_questoes?: number
           observacoes?: string | null
+          professor?: string | null
           titulo?: string
           turma_id?: string | null
+          valor_total?: number | null
         }
         Relationships: [
           {
