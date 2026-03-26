@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   School, GraduationCap, BookOpen, Laptop,
   TrendingUp, Users, CheckCircle, XCircle, Clock,
-  Filter, RefreshCw, StickyNote, BarChart3,
+  Filter, RefreshCw, BarChart3,
 } from 'lucide-react';
 import { PageHeader, StatCard, BadgeSituacao } from '@/components/ui-escola';
 import { cn } from '@/lib/utils';
