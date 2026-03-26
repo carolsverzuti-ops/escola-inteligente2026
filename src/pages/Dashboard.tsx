@@ -282,9 +282,8 @@ export default function Dashboard() {
         <PostItBoard />
       </div>
 
-      {tab === 'graficos' && (
-        <>
-          {/* ── Linha 1: Pizza + Barra por turma ── */}
+      <>
+        {/* ── Linha 1: Pizza + Barra por turma ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <ChartCard title="Situação dos Alunos" icon={<Users className="w-4 h-4" />}>
               {totalComNota === 0 ? (
@@ -417,13 +416,6 @@ export default function Dashboard() {
             </div>
           </div>
         </>
-      )}
-
-      {tab === 'lembretes' && (
-        <div className="bg-card border border-border rounded-xl shadow-card p-4">
-          <PostItBoard />
-        </div>
-      )}
     </div>
   );
 }
