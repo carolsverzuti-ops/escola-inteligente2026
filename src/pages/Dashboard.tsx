@@ -277,23 +277,9 @@ export default function Dashboard() {
         <StatCard title="Reprovados" value={kpi.reprovados} icon={<XCircle className="w-5 h-5" />} color="red" subtitle={totalComNota > 0 ? `${Math.round(kpi.reprovados / totalComNota * 100)}%` : '—'} />
       </div>
 
-      {/* ── Tabs: Gráficos | Lembretes ── */}
-      <div className="flex gap-1 border-b border-border">
-        {[
-          { key: 'graficos', label: 'Gráficos e Análises', icon: <BarChart3 className="w-4 h-4" /> },
-          { key: 'lembretes', label: 'Lembretes', icon: <StickyNote className="w-4 h-4" /> },
-        ].map(t => (
-          <button key={t.key}
-            onClick={() => setTab(t.key as typeof tab)}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
-              tab === t.key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}>
-            {t.icon} {t.label}
-          </button>
-        ))}
+      {/* ── Lembretes post-it ── */}
+      <div className="bg-card border border-border rounded-xl shadow-card p-4">
+        <PostItBoard />
       </div>
 
       {tab === 'graficos' && (
