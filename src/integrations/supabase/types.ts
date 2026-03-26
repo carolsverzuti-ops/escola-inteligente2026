@@ -129,6 +129,69 @@ export type Database = {
           },
         ]
       }
+      lembretes: {
+        Row: {
+          concluido: boolean
+          cor: string
+          created_at: string
+          data: string | null
+          descricao: string | null
+          disciplina_id: string | null
+          fixado: boolean
+          id: string
+          posicao: number | null
+          prioridade: string
+          titulo: string
+          turma_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          concluido?: boolean
+          cor?: string
+          created_at?: string
+          data?: string | null
+          descricao?: string | null
+          disciplina_id?: string | null
+          fixado?: boolean
+          id?: string
+          posicao?: number | null
+          prioridade?: string
+          titulo: string
+          turma_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          concluido?: boolean
+          cor?: string
+          created_at?: string
+          data?: string | null
+          descricao?: string | null
+          disciplina_id?: string | null
+          fixado?: boolean
+          id?: string
+          posicao?: number | null
+          prioridade?: string
+          titulo?: string
+          turma_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lembretes_disciplina_id_fkey"
+            columns: ["disciplina_id"]
+            isOneToOne: false
+            referencedRelation: "disciplinas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lembretes_turma_id_fkey"
+            columns: ["turma_id"]
+            isOneToOne: false
+            referencedRelation: "turmas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notas: {
         Row: {
           aluno_id: string | null
