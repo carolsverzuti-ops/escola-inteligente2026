@@ -70,7 +70,7 @@ export default function Dashboard() {
   const [alunosBaixo, setAlunosBaixo] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'graficos' | 'lembretes'>('graficos');
+  
 
   const formatDate = (d: string) =>
     new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
