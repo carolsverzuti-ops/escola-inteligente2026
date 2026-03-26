@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, X, Pin, PinOff, Check, AlertTriangle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, X, Pin, PinOff, Check, Clock, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
@@ -16,129 +16,98 @@ interface Lembrete {
   disciplina_id?: string | null;
   concluido: boolean;
   fixado: boolean;
-  posicao: number;
   created_at: string;
 }
 
 interface Turma { id: string; nome: string }
 interface Disciplina { id: string; nome: string }
 
-// ── mapeamento de cores ────────────────────────────────────────────
-const COR_MAP: Record<string, { bg: string; border: string; header: string }> = {
-  amarelo: { bg: 'bg-[#FEF9C3]', border: 'border-[#FDE047]', header: 'bg-[#FDE047]' },
-  verde:   { bg: 'bg-[#DCFCE7]', border: 'border-[#86EFAC]', header: 'bg-[#86EFAC]' },
-  azul:    { bg: 'bg-[#DBEAFE]', border: 'border-[#93C5FD]', header: 'bg-[#93C5FD]' },
-  rosa:    { bg: 'bg-[#FCE7F3]', border: 'border-[#F9A8D4]', header: 'bg-[#F9A8D4]' },
-  laranja: { bg: 'bg-[#FED7AA]', border: 'border-[#FB923C]', header: 'bg-[#FB923C]' },
-  roxo:    { bg: 'bg-[#EDE9FE]', border: 'border-[#C4B5FD]', header: 'bg-[#C4B5FD]' },
+// ── paleta de cores dos post-its ───────────────────────────────────
+const COR_STYLE: Record<string, { card: string; header: string; dot: string }> = {
+  amarelo: { card: 'bg-yellow-50  border-yellow-300', header: 'bg-yellow-200',  dot: 'bg-yellow-400'  },
+  verde:   { card: 'bg-green-50   border-green-300',  header: 'bg-green-200',   dot: 'bg-green-400'   },
+  azul:    { card: 'bg-blue-50    border-blue-300',   header: 'bg-blue-200',    dot: 'bg-blue-400'    },
+  rosa:    { card: 'bg-pink-50    border-pink-300',   header: 'bg-pink-200',    dot: 'bg-pink-400'    },
+  laranja: { card: 'bg-orange-50  border-orange-300', header: 'bg-orange-200',  dot: 'bg-orange-400'  },
+  roxo:    { card: 'bg-purple-50  border-purple-300', header: 'bg-purple-200',  dot: 'bg-purple-400'  },
 };
 
-const PRIORIDADE_LABEL: Record<string, string> = {
-  baixa: '🟢 Baixa',
-  media: '🟡 Média',
-  alta:  '🔴 Alta',
-};
+const PRIORIDADE_CORES: Record<string, string> = { baixa: 'verde', media: 'amarelo', alta: 'rosa' };
+const PRIORIDADE_LABEL: Record<string, string>  = { baixa: '🟢 Baixa', media: '🟡 Média', alta: '🔴 Alta' };
 
-const COR_DEFAULT_POR_PRIORIDADE: Record<string, string> = {
-  baixa: 'verde',
-  media: 'amarelo',
-  alta:  'rosa',
-};
-
-// ── helper ─────────────────────────────────────────────────────────
-function isToday(dateStr?: string | null) {
-  if (!dateStr) return false;
-  return new Date(dateStr + 'T12:00:00').toDateString() === new Date().toDateString();
+function isToday(d?: string | null) {
+  if (!d) return false;
+  return new Date(d + 'T12:00:00').toDateString() === new Date().toDateString();
 }
-function isPast(dateStr?: string | null) {
-  if (!dateStr) return false;
-  const d = new Date(dateStr + 'T12:00:00');
-  d.setHours(23, 59, 59, 999);
-  return d < new Date();
+function isPast(d?: string | null) {
+  if (!d) return false;
+  const dt = new Date(d + 'T23:59:59');
+  return dt < new Date() && !isToday(d);
 }
-function fmtDate(dateStr?: string | null) {
-  if (!dateStr) return '';
-  return new Date(dateStr + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+function fmtDate(d?: string | null) {
+  if (!d) return '';
+  return new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
 
-// ── Formulário de criação ──────────────────────────────────────────
-function NovoLembreteForm({
-  turmas, disciplinas, onSave, onClose,
-}: {
-  turmas: Turma[]; disciplinas: Disciplina[];
-  onSave: () => void; onClose: () => void;
+// usar `any` para contornar tipos desatualizados
+const db = supabase as any;
+
+// ── Formulário ─────────────────────────────────────────────────────
+function NovoForm({ turmas, disciplinas, onSave, onClose }: {
+  turmas: Turma[]; disciplinas: Disciplina[]; onSave: () => void; onClose: () => void;
 }) {
   const { toast } = useToast();
-  const [form, setForm] = useState({
-    titulo: '', descricao: '', data: '', prioridade: 'media',
-    cor: 'amarelo', turma_id: '', disciplina_id: '',
-  });
-  const [saving, setSaving] = useState(false);
+  const [titulo, setTitulo]         = useState('');
+  const [descricao, setDescricao]   = useState('');
+  const [data, setData]             = useState('');
+  const [prioridade, setPrioridade] = useState('media');
+  const [cor, setCor]               = useState('amarelo');
+  const [turmaId, setTurmaId]       = useState('');
+  const [discId, setDiscId]         = useState('');
+  const [saving, setSaving]         = useState(false);
 
-  const set = (k: string, v: string) => {
-    setForm(f => {
-      const next = { ...f, [k]: v };
-      if (k === 'prioridade') next.cor = COR_DEFAULT_POR_PRIORIDADE[v] || 'amarelo';
-      return next;
-    });
-  };
+  const handlePrioridade = (p: string) => { setPrioridade(p); setCor(PRIORIDADE_CORES[p] || 'amarelo'); };
+  const style = COR_STYLE[cor] || COR_STYLE['amarelo'];
 
-  const handleSave = async () => {
-    if (!form.titulo.trim()) { toast({ title: 'Título obrigatório', variant: 'destructive' }); return; }
+  const save = async () => {
+    if (!titulo.trim()) { toast({ title: 'Título obrigatório', variant: 'destructive' }); return; }
     setSaving(true);
-    const { error } = await supabase.from('lembretes').insert({
-      titulo: form.titulo.trim(),
-      descricao: form.descricao || null,
-      data: form.data || null,
-      prioridade: form.prioridade as 'baixa' | 'media' | 'alta',
-      cor: form.cor,
-      turma_id: form.turma_id || null,
-      disciplina_id: form.disciplina_id || null,
+    const { error } = await db.from('lembretes').insert({
+      titulo: titulo.trim(), descricao: descricao || null, data: data || null,
+      prioridade, cor, turma_id: turmaId || null, disciplina_id: discId || null,
     });
     setSaving(false);
     if (error) { toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' }); return; }
-    toast({ title: 'Lembrete criado!' });
-    onSave();
-    onClose();
+    toast({ title: '📌 Lembrete criado!' });
+    onSave(); onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div
-        className={cn('rounded-xl border-2 shadow-elevated p-5 w-full max-w-sm animate-fade-in',
-          COR_MAP[form.cor]?.bg, COR_MAP[form.cor]?.border)}
-        onClick={e => e.stopPropagation()}
-      >
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-fade-in" onClick={onClose}>
+      <div className={cn('rounded-2xl border-2 shadow-elevated p-5 w-full max-w-sm', style.card, style.card.split(' ')[1])}
+        onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-bold text-foreground">Novo Lembrete</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+          <h3 className="font-bold text-foreground text-base">📌 Novo Lembrete</h3>
+          <button onClick={onClose}><X className="w-4 h-4 text-muted-foreground hover:text-foreground" /></button>
         </div>
 
-        <input
-          autoFocus
-          placeholder="Título do lembrete..."
-          value={form.titulo}
-          onChange={e => set('titulo', e.target.value)}
-          className="w-full bg-white/60 border border-border rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-primary"
-        />
-        <textarea
-          placeholder="Descrição (opcional)..."
-          value={form.descricao}
-          onChange={e => set('descricao', e.target.value)}
-          rows={2}
-          className="w-full bg-white/60 border border-border rounded-lg px-3 py-2 text-sm mb-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-        />
+        <input autoFocus value={titulo} onChange={e => setTitulo(e.target.value)}
+          placeholder="Título do lembrete..." onKeyDown={e => e.key === 'Enter' && save()}
+          className="w-full bg-white/70 border border-black/10 rounded-lg px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-primary" />
+        <textarea value={descricao} onChange={e => setDescricao(e.target.value)}
+          placeholder="Descrição (opcional)..." rows={2}
+          className="w-full bg-white/70 border border-black/10 rounded-lg px-3 py-2 text-sm mb-2 resize-none focus:outline-none focus:ring-2 focus:ring-primary" />
 
         <div className="grid grid-cols-2 gap-2 mb-2">
           <div>
-            <label className="text-xs text-muted-foreground font-medium">Data</label>
-            <input type="date" value={form.data} onChange={e => set('data', e.target.value)}
-              className="w-full bg-white/60 border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+            <label className="text-xs text-foreground/60 font-medium">Data</label>
+            <input type="date" value={data} onChange={e => setData(e.target.value)}
+              className="w-full bg-white/70 border border-black/10 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
           <div>
-            <label className="text-xs text-muted-foreground font-medium">Prioridade</label>
-            <select value={form.prioridade} onChange={e => set('prioridade', e.target.value)}
-              className="w-full bg-white/60 border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+            <label className="text-xs text-foreground/60 font-medium">Prioridade</label>
+            <select value={prioridade} onChange={e => handlePrioridade(e.target.value)}
+              className="w-full bg-white/70 border border-black/10 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
               <option value="baixa">🟢 Baixa</option>
               <option value="media">🟡 Média</option>
               <option value="alta">🔴 Alta</option>
@@ -146,40 +115,39 @@ function NovoLembreteForm({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 mb-2">
+        <div className="grid grid-cols-2 gap-2 mb-3">
           <div>
-            <label className="text-xs text-muted-foreground font-medium">Turma</label>
-            <select value={form.turma_id} onChange={e => set('turma_id', e.target.value)}
-              className="w-full bg-white/60 border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+            <label className="text-xs text-foreground/60 font-medium">Turma</label>
+            <select value={turmaId} onChange={e => setTurmaId(e.target.value)}
+              className="w-full bg-white/70 border border-black/10 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
               <option value="">Todas</option>
               {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-muted-foreground font-medium">Disciplina</label>
-            <select value={form.disciplina_id} onChange={e => set('disciplina_id', e.target.value)}
-              className="w-full bg-white/60 border border-border rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+            <label className="text-xs text-foreground/60 font-medium">Disciplina</label>
+            <select value={discId} onChange={e => setDiscId(e.target.value)}
+              className="w-full bg-white/70 border border-black/10 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
               <option value="">Todas</option>
               {disciplinas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
             </select>
           </div>
         </div>
 
-        {/* Cor */}
-        <div className="mb-3">
-          <label className="text-xs text-muted-foreground font-medium block mb-1">Cor</label>
+        {/* Seletor de cor */}
+        <div className="mb-4">
+          <label className="text-xs text-foreground/60 font-medium block mb-1.5">Cor do post-it</label>
           <div className="flex gap-2">
-            {Object.entries(COR_MAP).map(([key, val]) => (
-              <button key={key} title={key}
-                onClick={() => set('cor', key)}
-                className={cn('w-6 h-6 rounded-full border-2 transition-transform', val.header,
-                  form.cor === key ? 'border-foreground scale-125' : 'border-transparent')} />
+            {Object.entries(COR_STYLE).map(([key, val]) => (
+              <button key={key} title={key} onClick={() => setCor(key)}
+                className={cn('w-7 h-7 rounded-full border-2 transition-all', val.dot,
+                  cor === key ? 'border-foreground scale-110 shadow-md' : 'border-transparent')} />
             ))}
           </div>
         </div>
 
-        <button onClick={handleSave} disabled={saving}
-          className="w-full bg-primary text-primary-foreground rounded-lg py-2 text-sm font-semibold hover:bg-primary/90 disabled:opacity-60 transition-colors">
+        <button onClick={save} disabled={saving}
+          className="w-full bg-primary text-primary-foreground rounded-lg py-2 text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors">
           {saving ? 'Salvando...' : 'Criar Lembrete'}
         </button>
       </div>
@@ -187,144 +155,122 @@ function NovoLembreteForm({
   );
 }
 
-// ── Card de lembrete ───────────────────────────────────────────────
-function LembreteCard({
-  lembrete, turmas, disciplinas, onRefresh,
-}: {
-  lembrete: Lembrete; turmas: Turma[]; disciplinas: Disciplina[]; onRefresh: () => void;
+// ── Card individual ────────────────────────────────────────────────
+function LembreteCard({ item, turmas, disciplinas, onRefresh }: {
+  item: Lembrete; turmas: Turma[]; disciplinas: Disciplina[]; onRefresh: () => void;
 }) {
   const { toast } = useToast();
-  const colors = COR_MAP[lembrete.cor] || COR_MAP['amarelo'];
-  const today = isToday(lembrete.data);
-  const past = isPast(lembrete.data) && !today;
-  const turma = turmas.find(t => t.id === lembrete.turma_id);
-  const disc = disciplinas.find(d => d.id === lembrete.disciplina_id);
+  const style = COR_STYLE[item.cor] || COR_STYLE['amarelo'];
+  const turma = turmas.find(t => t.id === item.turma_id);
+  const disc  = disciplinas.find(d => d.id === item.disciplina_id);
+  const hoje  = isToday(item.data);
+  const atrasado = isPast(item.data) && !item.concluido;
 
-  const toggle = async (field: 'concluido' | 'fixado') => {
-    await supabase.from('lembretes').update({ [field]: !lembrete[field] }).eq('id', lembrete.id);
+  const update = async (patch: Partial<Lembrete>) => {
+    await db.from('lembretes').update(patch).eq('id', item.id);
     onRefresh();
   };
   const remove = async () => {
-    await supabase.from('lembretes').delete().eq('id', lembrete.id);
+    await db.from('lembretes').delete().eq('id', item.id);
     toast({ title: 'Lembrete removido' });
     onRefresh();
   };
 
   return (
     <div className={cn(
-      'rounded-xl border-2 shadow-card overflow-hidden transition-all duration-200 hover:shadow-elevated',
-      colors.bg, colors.border,
-      lembrete.concluido && 'opacity-60',
+      'rounded-xl border-2 shadow-sm overflow-hidden transition-all hover:shadow-md group',
+      style.card, item.concluido && 'opacity-55',
     )}>
-      {/* header colorido */}
-      <div className={cn('px-3 py-1.5 flex items-center justify-between gap-1', colors.header)}>
+      {/* topo colorido */}
+      <div className={cn('px-3 py-1.5 flex items-center justify-between', style.header)}>
         <div className="flex items-center gap-1 min-w-0">
-          {lembrete.fixado && <Pin className="w-3 h-3 flex-shrink-0 text-foreground/70" />}
-          {today && <AlertTriangle className="w-3 h-3 flex-shrink-0 text-orange-600" />}
-          <span className="text-xs font-bold text-foreground/80 truncate">{PRIORIDADE_LABEL[lembrete.prioridade]}</span>
+          {item.fixado && <Pin className="w-3 h-3 text-foreground/70 flex-shrink-0" />}
+          {hoje && !item.concluido && <AlertTriangle className="w-3 h-3 text-orange-600 flex-shrink-0" />}
+          <span className="text-xs font-bold text-foreground/80 truncate">{PRIORIDADE_LABEL[item.prioridade]}</span>
         </div>
-        <div className="flex items-center gap-0.5">
-          <button onClick={() => toggle('fixado')} title={lembrete.fixado ? 'Desafixar' : 'Fixar'}
+        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button onClick={() => update({ fixado: !item.fixado })} title={item.fixado ? 'Desafixar' : 'Fixar'}
             className="p-1 hover:bg-black/10 rounded transition-colors">
-            {lembrete.fixado ? <PinOff className="w-3 h-3" /> : <Pin className="w-3 h-3" />}
+            {item.fixado ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />}
           </button>
-          <button onClick={() => toggle('concluido')} title={lembrete.concluido ? 'Reabrir' : 'Concluir'}
+          <button onClick={() => update({ concluido: !item.concluido })} title={item.concluido ? 'Reabrir' : 'Concluir'}
             className="p-1 hover:bg-black/10 rounded transition-colors">
-            <Check className={cn('w-3 h-3', lembrete.concluido && 'text-success')} />
+            <Check className={cn('w-3.5 h-3.5', item.concluido && 'text-green-700')} />
           </button>
           <button onClick={remove} title="Excluir"
             className="p-1 hover:bg-black/10 rounded transition-colors">
-            <X className="w-3 h-3" />
+            <X className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
       {/* corpo */}
-      <div className="px-3 py-2">
-        <p className={cn('text-sm font-semibold text-foreground leading-snug', lembrete.concluido && 'line-through')}>
-          {lembrete.titulo}
+      <div className="px-3 py-2.5">
+        <p className={cn('text-sm font-semibold text-foreground leading-snug mb-1', item.concluido && 'line-through text-foreground/50')}>
+          {item.titulo}
         </p>
-        {lembrete.descricao && (
-          <p className="text-xs text-foreground/70 mt-1 leading-snug">{lembrete.descricao}</p>
+        {item.descricao && (
+          <p className="text-xs text-foreground/65 leading-snug mb-2">{item.descricao}</p>
         )}
-        {/* meta */}
-        <div className="flex flex-wrap gap-1.5 mt-2">
-          {lembrete.data && (
+        <div className="flex flex-wrap gap-1">
+          {item.data && (
             <span className={cn(
               'inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-full font-medium',
-              today ? 'bg-orange-100 text-orange-700' :
-              past && !lembrete.concluido ? 'bg-red-100 text-destructive' :
-              'bg-white/50 text-foreground/70'
+              hoje ? 'bg-orange-200 text-orange-800' : atrasado ? 'bg-red-200 text-red-700' : 'bg-black/10 text-foreground/70',
             )}>
-              <Clock className="w-3 h-3" />
-              {today ? 'Hoje' : fmtDate(lembrete.data)}
-              {past && !today && !lembrete.concluido && ' ⚠'}
+              <Clock className="w-2.5 h-2.5" />
+              {hoje ? '🔔 Hoje' : atrasado ? `⚠ ${fmtDate(item.data)}` : fmtDate(item.data)}
             </span>
           )}
-          {turma && (
-            <span className="inline-flex text-xs px-1.5 py-0.5 rounded-full bg-white/50 text-foreground/70 font-medium">
-              {turma.nome}
-            </span>
-          )}
-          {disc && (
-            <span className="inline-flex text-xs px-1.5 py-0.5 rounded-full bg-white/50 text-foreground/70 font-medium">
-              {disc.nome}
-            </span>
-          )}
+          {turma && <span className="text-xs px-1.5 py-0.5 rounded-full bg-black/10 text-foreground/70">{turma.nome}</span>}
+          {disc  && <span className="text-xs px-1.5 py-0.5 rounded-full bg-black/10 text-foreground/70">{disc.nome}</span>}
         </div>
       </div>
     </div>
   );
 }
 
-// ── Board principal ────────────────────────────────────────────────
-interface PostItBoardProps {
-  compact?: boolean;
-}
-
-export function PostItBoard({ compact = false }: PostItBoardProps) {
-  const [lembretes, setLembretes] = useState<Lembrete[]>([]);
-  const [turmas, setTurmas] = useState<Turma[]>([]);
-  const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
-  const [showForm, setShowForm] = useState(false);
-  const [filterPrioridade, setFilterPrioridade] = useState('');
-  const [filterTurma, setFilterTurma] = useState('');
-  const [showConcluidos, setShowConcluidos] = useState(false);
-  const [loading, setLoading] = useState(true);
+// ── Board principal (exportado) ────────────────────────────────────
+export function PostItBoard() {
+  const [items, setItems]           = useState<Lembrete[]>([]);
+  const [turmas, setTurmas]         = useState<Turma[]>([]);
+  const [disciplinas, setDiscs]     = useState<Disciplina[]>([]);
+  const [showForm, setShowForm]     = useState(false);
+  const [showDone, setShowDone]     = useState(false);
+  const [loading, setLoading]       = useState(true);
 
   const load = async () => {
     const [{ data: l }, { data: t }, { data: d }] = await Promise.all([
-      supabase.from('lembretes').select('*').order('fixado', { ascending: false }).order('created_at', { ascending: false }),
+      db.from('lembretes').select('*').order('fixado', { ascending: false }).order('created_at', { ascending: false }),
       supabase.from('turmas').select('id, nome'),
       supabase.from('disciplinas').select('id, nome'),
     ]);
-    setLembretes((l as Lembrete[]) || []);
+    setItems(l || []);
     setTurmas(t || []);
-    setDisciplinas(d || []);
+    setDiscs(d || []);
     setLoading(false);
   };
 
   useEffect(() => { load(); }, []);
 
-  const filtered = lembretes.filter(l => {
-    if (!showConcluidos && l.concluido) return false;
-    if (filterPrioridade && l.prioridade !== filterPrioridade) return false;
-    if (filterTurma && l.turma_id !== filterTurma) return false;
-    return true;
-  });
-
-  const pendentes = filtered.filter(l => !l.concluido);
-  const concluidos = filtered.filter(l => l.concluido);
-  const hoje = filtered.filter(l => isToday(l.data) && !l.concluido).length;
-  const atrasados = filtered.filter(l => isPast(l.data) && !isToday(l.data) && !l.concluido).length;
+  const pendentes  = items.filter(i => !i.concluido);
+  const concluidos = items.filter(i => i.concluido);
+  const hoje   = pendentes.filter(i => isToday(i.data)).length;
+  const atrasados = pendentes.filter(i => isPast(i.data)).length;
 
   return (
-    <div>
-      {/* Toolbar */}
+    <section>
+      {/* cabeçalho */}
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-1">
+          <h2 className="font-semibold text-sm flex items-center gap-2">
+            📌 Lembretes
+            {pendentes.length > 0 && (
+              <span className="text-xs bg-primary/10 text-primary font-bold px-1.5 py-0.5 rounded-full">{pendentes.length}</span>
+            )}
+          </h2>
           {hoje > 0 && (
-            <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2 py-0.5 rounded-full">
+            <span className="text-xs bg-orange-100 text-orange-700 font-semibold px-2 py-0.5 rounded-full animate-pulse">
               🔔 {hoje} hoje
             </span>
           )}
@@ -334,64 +280,44 @@ export function PostItBoard({ compact = false }: PostItBoardProps) {
             </span>
           )}
         </div>
-
-        {!compact && (
-          <div className="flex gap-2 flex-wrap">
-            <select value={filterPrioridade} onChange={e => setFilterPrioridade(e.target.value)}
-              className="bg-card border border-border rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
-              <option value="">Todas prioridades</option>
-              <option value="alta">🔴 Alta</option>
-              <option value="media">🟡 Média</option>
-              <option value="baixa">🟢 Baixa</option>
-            </select>
-            <select value={filterTurma} onChange={e => setFilterTurma(e.target.value)}
-              className="bg-card border border-border rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
-              <option value="">Todas turmas</option>
-              {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-            </select>
-          </div>
-        )}
-
         <button onClick={() => setShowForm(true)}
           className="inline-flex items-center gap-1.5 bg-primary text-primary-foreground text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors shadow-sm">
-          <Plus className="w-3.5 h-3.5" /> Novo
+          <Plus className="w-3.5 h-3.5" /> Novo lembrete
         </button>
       </div>
 
-      {/* Grid de post-its */}
+      {/* grid de post-its */}
       {loading ? (
-        <div className="text-center py-6 text-muted-foreground text-sm">Carregando...</div>
+        <div className="text-center py-8 text-muted-foreground text-sm">Carregando...</div>
       ) : pendentes.length === 0 ? (
-        <div className="text-center py-8">
+        <div className="text-center py-10 border-2 border-dashed border-border rounded-xl">
           <p className="text-3xl mb-2">📌</p>
-          <p className="text-sm text-muted-foreground">Nenhum lembrete ativo</p>
-          <button onClick={() => setShowForm(true)} className="mt-2 text-xs text-primary hover:underline">
-            Criar primeiro lembrete
+          <p className="text-sm text-muted-foreground mb-3">Nenhum lembrete ativo</p>
+          <button onClick={() => setShowForm(true)}
+            className="text-xs text-primary border border-primary/30 px-3 py-1.5 rounded-lg hover:bg-primary/5 transition-colors">
+            + Criar primeiro lembrete
           </button>
         </div>
       ) : (
-        <div className={cn(
-          'grid gap-3',
-          compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-        )}>
-          {pendentes.map(l => (
-            <LembreteCard key={l.id} lembrete={l} turmas={turmas} disciplinas={disciplinas} onRefresh={load} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+          {pendentes.map(i => (
+            <LembreteCard key={i.id} item={i} turmas={turmas} disciplinas={disciplinas} onRefresh={load} />
           ))}
         </div>
       )}
 
-      {/* Concluídos (colapsável) */}
+      {/* concluídos */}
       {concluidos.length > 0 && (
         <div className="mt-4">
-          <button onClick={() => setShowConcluidos(v => !v)}
-            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2">
-            {showConcluidos ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            {concluidos.length} concluído{concluidos.length > 1 ? 's' : ''}
+          <button onClick={() => setShowDone(v => !v)}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2 select-none">
+            {showDone ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {concluidos.length} concluído{concluidos.length !== 1 ? 's' : ''}
           </button>
-          {showConcluidos && (
-            <div className={cn('grid gap-3', compact ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4')}>
-              {concluidos.map(l => (
-                <LembreteCard key={l.id} lembrete={l} turmas={turmas} disciplinas={disciplinas} onRefresh={load} />
+          {showDone && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+              {concluidos.map(i => (
+                <LembreteCard key={i.id} item={i} turmas={turmas} disciplinas={disciplinas} onRefresh={load} />
               ))}
             </div>
           )}
@@ -399,8 +325,8 @@ export function PostItBoard({ compact = false }: PostItBoardProps) {
       )}
 
       {showForm && (
-        <NovoLembreteForm turmas={turmas} disciplinas={disciplinas} onSave={load} onClose={() => setShowForm(false)} />
+        <NovoForm turmas={turmas} disciplinas={disciplinas} onSave={load} onClose={() => setShowForm(false)} />
       )}
-    </div>
+    </section>
   );
 }
