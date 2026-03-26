@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import {
   School, GraduationCap, BookOpen, Laptop,
   TrendingUp, Users, CheckCircle, XCircle, Clock,
-  Filter, RefreshCw, StickyNote, BarChart3,
+  Filter, RefreshCw, BarChart3,
 } from 'lucide-react';
 import { PageHeader, StatCard, BadgeSituacao } from '@/components/ui-escola';
 import { cn } from '@/lib/utils';
@@ -70,7 +70,7 @@ export default function Dashboard() {
   const [alunosBaixo, setAlunosBaixo] = useState<any[]>([]);
 
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'graficos' | 'lembretes'>('graficos');
+  
 
   const formatDate = (d: string) =>
     new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
@@ -277,28 +277,13 @@ export default function Dashboard() {
         <StatCard title="Reprovados" value={kpi.reprovados} icon={<XCircle className="w-5 h-5" />} color="red" subtitle={totalComNota > 0 ? `${Math.round(kpi.reprovados / totalComNota * 100)}%` : '—'} />
       </div>
 
-      {/* ── Tabs: Gráficos | Lembretes ── */}
-      <div className="flex gap-1 border-b border-border">
-        {[
-          { key: 'graficos', label: 'Gráficos e Análises', icon: <BarChart3 className="w-4 h-4" /> },
-          { key: 'lembretes', label: 'Lembretes', icon: <StickyNote className="w-4 h-4" /> },
-        ].map(t => (
-          <button key={t.key}
-            onClick={() => setTab(t.key as typeof tab)}
-            className={cn(
-              'flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
-              tab === t.key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}>
-            {t.icon} {t.label}
-          </button>
-        ))}
+      {/* ── Lembretes post-it ── */}
+      <div className="bg-card border border-border rounded-xl shadow-card p-4">
+        <PostItBoard />
       </div>
 
-      {tab === 'graficos' && (
-        <>
-          {/* ── Linha 1: Pizza + Barra por turma ── */}
+      <>
+        {/* ── Linha 1: Pizza + Barra por turma ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <ChartCard title="Situação dos Alunos" icon={<Users className="w-4 h-4" />}>
               {totalComNota === 0 ? (
@@ -431,13 +416,6 @@ export default function Dashboard() {
             </div>
           </div>
         </>
-      )}
-
-      {tab === 'lembretes' && (
-        <div className="bg-card border border-border rounded-xl shadow-card p-4">
-          <PostItBoard />
-        </div>
-      )}
     </div>
   );
 }
