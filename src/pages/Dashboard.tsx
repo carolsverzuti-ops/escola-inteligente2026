@@ -1,181 +1,443 @@
-import React, { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
+import React, { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import {
-  School, GraduationCap, ClipboardList, BookOpen,
-  Laptop, AlertTriangle, TrendingUp, Calendar,
-  Users, BarChart3, CheckCircle, XCircle, Clock
+  School, GraduationCap, BookOpen, Laptop,
+  TrendingUp, Users, CheckCircle, XCircle, Clock,
+  Filter, RefreshCw, StickyNote, BarChart3,
 } from 'lucide-react';
-import { StatCard, PageHeader, TableContainer, BadgeSituacao } from '@/components/ui-escola';
+import { PageHeader, StatCard, BadgeSituacao } from '@/components/ui-escola';
 import { cn } from '@/lib/utils';
+import {
+  GraficoPizza, GraficoBarraTurma, GraficoEvolucao,
+  GraficoTipoAvaliacao, GraficoDistribuicao, GraficoAlunos,
+  type SituacaoData, type MediaTurmaData, type EvolucaoData,
+  type TipoAvalData, type DistribuicaoData, type AlunoDesempenhoData,
+} from '@/components/dashboard/DashboardCharts';
+import { PostItBoard } from '@/components/dashboard/PostItBoard';
 
+// ── tipos ──────────────────────────────────────────────────────────
+interface Turma { id: string; nome: string }
+interface Disciplina { id: string; nome: string }
+
+// ── utils ──────────────────────────────────────────────────────────
+function calcSituacao(media: number) {
+  if (media >= 7) return 'Aprovado';
+  if (media >= 5) return 'Recuperação';
+  return 'Reprovado';
+}
+
+function ChartCard({ title, icon, children, className }: {
+  title: string; icon: React.ReactNode; children: React.ReactNode; className?: string;
+}) {
+  return (
+    <div className={cn('bg-card border border-border rounded-xl shadow-card overflow-hidden', className)}>
+      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+        <span className="text-primary">{icon}</span>
+        <h2 className="font-semibold text-sm">{title}</h2>
+      </div>
+      <div className="p-3">{children}</div>
+    </div>
+  );
+}
+
+// ── Dashboard ──────────────────────────────────────────────────────
 export default function Dashboard() {
-  const [stats, setStats] = useState({
+  const [turmas, setTurmas] = useState<Turma[]>([]);
+  const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
+
+  // filtros
+  const [fTurma, setFTurma] = useState('');
+  const [fDisciplina, setFDisciplina] = useState('');
+  const [fBimestre, setFBimestre] = useState('');
+
+  // KPIs
+  const [kpi, setKpi] = useState({
     turmas: 0, alunos: 0, planos: 0, ocorrencias: 0,
+    aprovados: 0, recuperacao: 0, reprovados: 0,
   });
-  const [alunosBaixoDesempenho, setAlunosBaixoDesempenho] = useState<any[]>([]);
+
+  // gráficos
+  const [dadosPizza, setDadosPizza] = useState<SituacaoData[]>([]);
+  const [dadosBarraTurma, setDadosBarraTurma] = useState<MediaTurmaData[]>([]);
+  const [dadosEvolucao, setDadosEvolucao] = useState<EvolucaoData[]>([]);
+  const [evolucaoKeys, setEvolucaoKeys] = useState<string[]>([]);
+  const [dadosTipoAval, setDadosTipoAval] = useState<TipoAvalData[]>([]);
+  const [dadosDistrib, setDadosDistrib] = useState<DistribuicaoData[]>([]);
+  const [dadosAlunos, setDadosAlunos] = useState<AlunoDesempenhoData[]>([]);
+
+  // listas
   const [proximosPlanos, setProximosPlanos] = useState<any[]>([]);
-  const [ocorrenciasRecentes, setOcorrenciasRecentes] = useState<any[]>([]);
+  const [alunosBaixo, setAlunosBaixo] = useState<any[]>([]);
+
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<'graficos' | 'lembretes'>('graficos');
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const formatDate = (d: string) =>
+    new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
-  async function loadData() {
-    const [{ count: turmas }, { count: alunos }, { count: planos }, { count: ocorrencias }] = await Promise.all([
+  const load = useCallback(async () => {
+    setLoading(true);
+
+    // ── bases ────────────────────────────────────────────────────
+    const [
+      { count: cTurmas }, { count: cAlunos }, { count: cPlanos }, { count: cOcorrencias },
+      { data: turmasData }, { data: disciplinasData },
+    ] = await Promise.all([
       supabase.from('turmas').select('*', { count: 'exact', head: true }),
       supabase.from('alunos').select('*', { count: 'exact', head: true }).eq('ativo', true),
       supabase.from('planos_aula').select('*', { count: 'exact', head: true }),
       supabase.from('ocorrencias_notebook').select('*', { count: 'exact', head: true }),
+      supabase.from('turmas').select('id, nome').order('nome'),
+      supabase.from('disciplinas').select('id, nome').order('nome'),
+    ]);
+    setTurmas(turmasData || []);
+    setDisciplinas(disciplinasData || []);
+
+    // ── notas com filtros ────────────────────────────────────────
+    let notasQ = supabase
+      .from('notas')
+      .select('nota, bimestre, aluno_id, tipo_avaliacao_id, alunos!inner(nome, turma_id, turmas(nome)), tipos_avaliacao(nome, turma_id, disciplina_id)');
+    if (fBimestre) notasQ = notasQ.eq('bimestre', Number(fBimestre));
+    if (fTurma) notasQ = notasQ.eq('alunos.turma_id', fTurma);
+    const { data: notasData } = await notasQ;
+    const notas = (notasData || []) as any[];
+
+    // filtro disciplina (client-side via tipos_avaliacao)
+    const notasFilt = fDisciplina
+      ? notas.filter(n => n.tipos_avaliacao?.disciplina_id === fDisciplina)
+      : notas;
+
+    // ── médias por aluno ────────────────────────────────────────
+    const mediaAluno: Record<string, { soma: number; cnt: number; nome: string; turma: string }> = {};
+    notasFilt.forEach(n => {
+      if (!n.aluno_id || n.nota == null) return;
+      const nome = n.alunos?.nome || '?';
+      const turma = n.alunos?.turmas?.nome || '?';
+      if (!mediaAluno[n.aluno_id]) mediaAluno[n.aluno_id] = { soma: 0, cnt: 0, nome, turma };
+      mediaAluno[n.aluno_id].soma += Number(n.nota);
+      mediaAluno[n.aluno_id].cnt++;
+    });
+
+    let aprovados = 0, recuperacao = 0, reprovados = 0;
+    const alunosList = Object.values(mediaAluno).map(a => {
+      const media = a.cnt > 0 ? a.soma / a.cnt : 0;
+      const sit = calcSituacao(media);
+      if (sit === 'Aprovado') aprovados++;
+      else if (sit === 'Recuperação') recuperacao++;
+      else reprovados++;
+      return { nome: a.nome, media: parseFloat(media.toFixed(2)), turma: a.turma };
+    });
+
+    setKpi({ turmas: cTurmas || 0, alunos: cAlunos || 0, planos: cPlanos || 0, ocorrencias: cOcorrencias || 0, aprovados, recuperacao, reprovados });
+
+    // pizza
+    setDadosPizza([
+      { name: 'Aprovados', value: aprovados },
+      { name: 'Recuperação', value: recuperacao },
+      { name: 'Reprovados', value: reprovados },
     ]);
 
-    setStats({ turmas: turmas || 0, alunos: alunos || 0, planos: planos || 0, ocorrencias: ocorrencias || 0 });
+    // barra por turma
+    const mediaPorTurma: Record<string, { soma: number; cnt: number }> = {};
+    notasFilt.forEach(n => {
+      const t = n.alunos?.turmas?.nome;
+      if (!t || n.nota == null) return;
+      if (!mediaPorTurma[t]) mediaPorTurma[t] = { soma: 0, cnt: 0 };
+      mediaPorTurma[t].soma += Number(n.nota);
+      mediaPorTurma[t].cnt++;
+    });
+    setDadosBarraTurma(
+      Object.entries(mediaPorTurma).map(([turma, v]) => ({
+        turma,
+        media: parseFloat((v.soma / v.cnt).toFixed(2)),
+      }))
+    );
 
-    // Próximos planos
-    const { data: planoData } = await supabase
+    // evolução por bimestre
+    const evBim: Record<number, { soma: number; cnt: number }> = {};
+    notas.forEach(n => {
+      const b = n.bimestre || 1;
+      if (n.nota == null) return;
+      if (!evBim[b]) evBim[b] = { soma: 0, cnt: 0 };
+      evBim[b].soma += Number(n.nota);
+      evBim[b].cnt++;
+    });
+    const evolData: EvolucaoData[] = Object.entries(evBim)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([bim, v]) => ({ label: `${bim}º Bim`, Média: parseFloat((v.soma / v.cnt).toFixed(2)) }));
+    setDadosEvolucao(evolData);
+    setEvolucaoKeys(evolData.length > 0 ? ['Média'] : []);
+
+    // por tipo de avaliação
+    const tipoMap: Record<string, { soma: number; cnt: number }> = {};
+    notasFilt.forEach(n => {
+      const t = n.tipos_avaliacao?.nome;
+      if (!t || n.nota == null) return;
+      if (!tipoMap[t]) tipoMap[t] = { soma: 0, cnt: 0 };
+      tipoMap[t].soma += Number(n.nota);
+      tipoMap[t].cnt++;
+    });
+    setDadosTipoAval(
+      Object.entries(tipoMap).map(([nome, v]) => ({
+        nome,
+        media: parseFloat((v.soma / v.cnt).toFixed(2)),
+      }))
+    );
+
+    // distribuição
+    const faixas: DistribuicaoData[] = [
+      { faixa: '0–2', quantidade: 0 },
+      { faixa: '2–4', quantidade: 0 },
+      { faixa: '4–6', quantidade: 0 },
+      { faixa: '6–8', quantidade: 0 },
+      { faixa: '8–10', quantidade: 0 },
+    ];
+    notasFilt.forEach(n => {
+      const v = Number(n.nota);
+      if (v < 2) faixas[0].quantidade++;
+      else if (v < 4) faixas[1].quantidade++;
+      else if (v < 6) faixas[2].quantidade++;
+      else if (v < 8) faixas[3].quantidade++;
+      else faixas[4].quantidade++;
+    });
+    setDadosDistrib(faixas);
+
+    // alunos ranqueados
+    const sorted = alunosList.sort((a, b) => a.media - b.media).slice(0, 12);
+    setDadosAlunos(sorted);
+
+    // alunos baixo rendimento
+    setAlunosBaixo(alunosList.filter(a => a.media < 5).slice(0, 6));
+
+    // próximos planos
+    let planosQ = supabase
       .from('planos_aula')
       .select('*, turmas(nome), disciplinas(nome)')
       .gte('data_aula', new Date().toISOString().split('T')[0])
       .order('data_aula', { ascending: true })
-      .limit(4);
-    setProximosPlanos(planoData || []);
-
-    // Ocorrências recentes
-    const { data: ocData } = await supabase
-      .from('ocorrencias_notebook')
-      .select('*, turmas(nome)')
-      .order('data_ocorrencia', { ascending: false })
-      .limit(4);
-    setOcorrenciasRecentes(ocData || []);
-
-    // Alunos com baixo desempenho (notas baixas)
-    const { data: notasData } = await supabase
-      .from('notas')
-      .select('aluno_id, nota, alunos(nome, turmas(nome))')
-      .lt('nota', 5)
-      .order('nota', { ascending: true })
-      .limit(6);
-    setAlunosBaixoDesempenho(notasData || []);
+      .limit(5);
+    if (fTurma) planosQ = planosQ.eq('turma_id', fTurma);
+    const { data: planosData } = await planosQ;
+    setProximosPlanos(planosData || []);
 
     setLoading(false);
-  }
+  }, [fTurma, fDisciplina, fBimestre]);
 
-  const formatDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  useEffect(() => { load(); }, [load]);
+
+  const totalComNota = kpi.aprovados + kpi.recuperacao + kpi.reprovados;
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in space-y-4">
       <PageHeader
         title="Dashboard"
-        subtitle={`Bem-vindo! Hoje é ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}`}
-      />
+        subtitle={`Hoje é ${new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}`}
+      >
+        <button onClick={load} disabled={loading}
+          className="inline-flex items-center gap-1.5 text-xs bg-secondary text-secondary-foreground px-3 py-1.5 rounded-lg hover:bg-border transition-colors">
+          <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+          Atualizar
+        </button>
+      </PageHeader>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard title="Turmas Ativas" value={stats.turmas} icon={<School className="w-6 h-6" />} color="blue" subtitle="2025" />
-        <StatCard title="Total de Alunos" value={stats.alunos} icon={<GraduationCap className="w-6 h-6" />} color="green" subtitle="matriculados" />
-        <StatCard title="Planos de Aula" value={stats.planos} icon={<BookOpen className="w-6 h-6" />} color="yellow" subtitle="registrados" />
-        <StatCard title="Ocorrências" value={stats.ocorrencias} icon={<Laptop className="w-6 h-6" />} color="red" subtitle="de notebook" />
+      {/* ── Filtros ── */}
+      <div className="flex flex-wrap gap-2 items-center bg-card border border-border rounded-xl px-4 py-2.5">
+        <Filter className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        <select value={fTurma} onChange={e => setFTurma(e.target.value)}
+          className="bg-secondary border-0 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+          <option value="">Todas as turmas</option>
+          {turmas.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+        </select>
+        <select value={fDisciplina} onChange={e => setFDisciplina(e.target.value)}
+          className="bg-secondary border-0 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+          <option value="">Todas as disciplinas</option>
+          {disciplinas.map(d => <option key={d.id} value={d.id}>{d.nome}</option>)}
+        </select>
+        <select value={fBimestre} onChange={e => setFBimestre(e.target.value)}
+          className="bg-secondary border-0 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary">
+          <option value="">Todos os bimestres</option>
+          {[1, 2, 3, 4].map(b => <option key={b} value={b}>{b}º Bimestre</option>)}
+        </select>
+        {(fTurma || fDisciplina || fBimestre) && (
+          <button onClick={() => { setFTurma(''); setFDisciplina(''); setFBimestre(''); }}
+            className="text-xs text-destructive hover:underline">
+            Limpar filtros
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-        {/* Próximas aulas */}
-        <div className="bg-card border border-border rounded-xl shadow-card">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Calendar className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold text-sm">Próximas Aulas Planejadas</h2>
-          </div>
-          <div className="divide-y divide-border/50">
-            {proximosPlanos.length === 0 ? (
-              <p className="text-xs text-muted-foreground p-4 text-center">Nenhum plano futuro</p>
-            ) : proximosPlanos.map((p) => (
-              <div key={p.id} className="px-4 py-3 flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-primary-light flex flex-col items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-primary leading-tight">{formatDate(p.data_aula).split('/')[0]}</span>
-                  <span className="text-xs text-primary/70 leading-tight">{formatDate(p.data_aula).split('/')[1]}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{p.disciplinas?.nome}</p>
-                  <p className="text-xs text-muted-foreground truncate">{p.turmas?.nome} · {p.conteudo}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Alunos baixo desempenho */}
-        <div className="bg-card border border-border rounded-xl shadow-card">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <AlertTriangle className="w-4 h-4 text-warning" />
-            <h2 className="font-semibold text-sm">Alunos com Baixo Rendimento</h2>
-          </div>
-          <div className="divide-y divide-border/50">
-            {alunosBaixoDesempenho.length === 0 ? (
-              <div className="p-4 text-center">
-                <CheckCircle className="w-8 h-8 text-success mx-auto mb-1" />
-                <p className="text-xs text-muted-foreground">Todos com notas boas!</p>
-              </div>
-            ) : alunosBaixoDesempenho.map((n, i) => (
-              <div key={i} className="px-4 py-2.5 flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-danger-light flex items-center justify-center flex-shrink-0">
-                  <span className="text-xs font-bold text-destructive">{n.nota?.toFixed(1)}</span>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{(n.alunos as any)?.nome}</p>
-                  <p className="text-xs text-muted-foreground">{(n.alunos as any)?.turmas?.nome}</p>
-                </div>
-                <BadgeSituacao situacao={n.nota >= 7 ? 'Aprovado' : n.nota >= 5 ? 'Recuperação' : 'Reprovado'} />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Ocorrências recentes */}
-        <div className="bg-card border border-border rounded-xl shadow-card">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-            <Laptop className="w-4 h-4 text-primary" />
-            <h2 className="font-semibold text-sm">Ocorrências Recentes</h2>
-          </div>
-          <div className="divide-y divide-border/50">
-            {ocorrenciasRecentes.length === 0 ? (
-              <p className="text-xs text-muted-foreground p-4 text-center">Nenhuma ocorrência</p>
-            ) : ocorrenciasRecentes.map((oc) => (
-              <div key={oc.id} className="px-4 py-3 flex items-start gap-3">
-                <div className={cn('w-2 h-2 rounded-full mt-1.5 flex-shrink-0', oc.equipamento_danificado ? 'bg-destructive' : 'bg-warning')}>
-                </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{oc.problema_encontrado}</p>
-                  <p className="text-xs text-muted-foreground">{oc.turmas?.nome} · {formatDate(oc.data_ocorrencia)}</p>
-                  {oc.equipamento_danificado && (
-                    <span className="text-xs text-destructive font-medium">⚠ Equipamento danificado</span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      {/* ── KPIs ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+        <StatCard title="Turmas" value={kpi.turmas} icon={<School className="w-5 h-5" />} color="blue" subtitle="ativas" />
+        <StatCard title="Alunos" value={kpi.alunos} icon={<GraduationCap className="w-5 h-5" />} color="green" subtitle="matriculados" />
+        <StatCard title="Planos" value={kpi.planos} icon={<BookOpen className="w-5 h-5" />} color="yellow" subtitle="de aula" />
+        <StatCard title="Ocorrências" value={kpi.ocorrencias} icon={<Laptop className="w-5 h-5" />} color="red" subtitle="notebook" />
+        <StatCard title="Aprovados" value={kpi.aprovados} icon={<CheckCircle className="w-5 h-5" />} color="green" subtitle={totalComNota > 0 ? `${Math.round(kpi.aprovados / totalComNota * 100)}%` : '—'} />
+        <StatCard title="Recuperação" value={kpi.recuperacao} icon={<Clock className="w-5 h-5" />} color="yellow" subtitle={totalComNota > 0 ? `${Math.round(kpi.recuperacao / totalComNota * 100)}%` : '—'} />
+        <StatCard title="Reprovados" value={kpi.reprovados} icon={<XCircle className="w-5 h-5" />} color="red" subtitle={totalComNota > 0 ? `${Math.round(kpi.reprovados / totalComNota * 100)}%` : '—'} />
       </div>
 
-      {/* Resumo bimestral */}
-      <div className="mt-4 bg-gradient-to-r from-primary to-primary-glow rounded-xl p-4 text-primary-foreground">
-        <div className="flex items-center gap-2 mb-3">
-          <BarChart3 className="w-5 h-5" />
-          <h2 className="font-semibold">Resumo do 1º Bimestre 2025</h2>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            { label: 'Aulas Planejadas', value: stats.planos, icon: <BookOpen className="w-4 h-4" /> },
-            { label: 'Avaliações', value: '4', icon: <ClipboardList className="w-4 h-4" /> },
-            { label: 'Ocorrências', value: stats.ocorrencias, icon: <Laptop className="w-4 h-4" /> },
-            { label: 'Alunos Ativos', value: stats.alunos, icon: <Users className="w-4 h-4" /> },
-          ].map((item) => (
-            <div key={item.label} className="bg-white/10 rounded-lg p-3 text-center">
-              <div className="flex justify-center mb-1 opacity-80">{item.icon}</div>
-              <p className="text-2xl font-bold">{item.value}</p>
-              <p className="text-xs opacity-75">{item.label}</p>
+      {/* ── Tabs: Gráficos | Lembretes ── */}
+      <div className="flex gap-1 border-b border-border">
+        {[
+          { key: 'graficos', label: 'Gráficos e Análises', icon: <BarChart3 className="w-4 h-4" /> },
+          { key: 'lembretes', label: 'Lembretes', icon: <StickyNote className="w-4 h-4" /> },
+        ].map(t => (
+          <button key={t.key}
+            onClick={() => setTab(t.key as typeof tab)}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px',
+              tab === t.key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground'
+            )}>
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'graficos' && (
+        <>
+          {/* ── Linha 1: Pizza + Barra por turma ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartCard title="Situação dos Alunos" icon={<Users className="w-4 h-4" />}>
+              {totalComNota === 0 ? (
+                <p className="text-center text-muted-foreground text-sm py-10">Sem notas lançadas</p>
+              ) : (
+                <>
+                  <GraficoPizza data={dadosPizza} />
+                  <div className="flex justify-center gap-4 mt-1">
+                    <span className="text-xs text-success font-semibold">{kpi.aprovados} aprovados</span>
+                    <span className="text-xs text-warning font-semibold">{kpi.recuperacao} recuperação</span>
+                    <span className="text-xs text-destructive font-semibold">{kpi.reprovados} reprovados</span>
+                  </div>
+                </>
+              )}
+            </ChartCard>
+
+            <ChartCard title="Média por Turma" icon={<BarChart3 className="w-4 h-4" />}>
+              {dadosBarraTurma.length === 0 ? (
+                <p className="text-center text-muted-foreground text-sm py-10">Sem dados</p>
+              ) : (
+                <GraficoBarraTurma data={dadosBarraTurma} />
+              )}
+            </ChartCard>
+          </div>
+
+          {/* ── Linha 2: Evolução + Tipo avaliação ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ChartCard title="Evolução por Bimestre" icon={<TrendingUp className="w-4 h-4" />}>
+              {dadosEvolucao.length === 0 ? (
+                <p className="text-center text-muted-foreground text-sm py-10">Sem dados</p>
+              ) : (
+                <GraficoEvolucao data={dadosEvolucao} keys={evolucaoKeys} />
+              )}
+            </ChartCard>
+
+            <ChartCard title="Média por Tipo de Avaliação" icon={<BarChart3 className="w-4 h-4" />}>
+              {dadosTipoAval.length === 0 ? (
+                <p className="text-center text-muted-foreground text-sm py-10">Sem dados</p>
+              ) : (
+                <GraficoTipoAvaliacao data={dadosTipoAval} />
+              )}
+            </ChartCard>
+          </div>
+
+          {/* ── Linha 3: Distribuição ── */}
+          <ChartCard title="Distribuição das Notas" icon={<BarChart3 className="w-4 h-4" />}>
+            <GraficoDistribuicao data={dadosDistrib} />
+          </ChartCard>
+
+          {/* ── Linha 4: Desempenho por aluno ── */}
+          {dadosAlunos.length > 0 && (
+            <ChartCard title="Desempenho por Aluno (ordenado por nota)" icon={<Users className="w-4 h-4" />}>
+              <GraficoAlunos data={dadosAlunos} />
+            </ChartCard>
+          )}
+
+          {/* ── Linha 5: Próximos planos + Baixo rendimento ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Próximas aulas */}
+            <div className="bg-card border border-border rounded-xl shadow-card">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+                <BookOpen className="w-4 h-4 text-primary" />
+                <h2 className="font-semibold text-sm">Próximas Aulas Planejadas</h2>
+              </div>
+              <div className="divide-y divide-border/50">
+                {proximosPlanos.length === 0 ? (
+                  <p className="text-xs text-muted-foreground p-4 text-center">Nenhum plano futuro</p>
+                ) : proximosPlanos.map((p) => (
+                  <div key={p.id} className="px-4 py-3 flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary-light flex flex-col items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-primary leading-tight">{formatDate(p.data_aula).split('/')[0]}</span>
+                      <span className="text-xs text-primary/70 leading-tight">{formatDate(p.data_aula).split('/')[1]}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{p.disciplinas?.nome}</p>
+                      <p className="text-xs text-muted-foreground truncate">{p.turmas?.nome} · {p.conteudo}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
+
+            {/* Baixo rendimento */}
+            <div className="bg-card border border-border rounded-xl shadow-card">
+              <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
+                <XCircle className="w-4 h-4 text-warning" />
+                <h2 className="font-semibold text-sm">Alunos com Baixo Rendimento</h2>
+              </div>
+              <div className="divide-y divide-border/50">
+                {alunosBaixo.length === 0 ? (
+                  <div className="p-6 text-center">
+                    <CheckCircle className="w-8 h-8 text-success mx-auto mb-1" />
+                    <p className="text-xs text-muted-foreground">Todos com notas boas!</p>
+                  </div>
+                ) : alunosBaixo.map((a, i) => (
+                  <div key={i} className="px-4 py-2.5 flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-danger-light flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-destructive">{a.media.toFixed(1)}</span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">{a.nome}</p>
+                      <p className="text-xs text-muted-foreground">{a.turma}</p>
+                    </div>
+                    <BadgeSituacao situacao={calcSituacao(a.media)} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Banner bimestral ── */}
+          <div className="bg-gradient-to-r from-primary to-primary-glow rounded-xl p-4 text-primary-foreground">
+            <div className="flex items-center gap-2 mb-3">
+              <BarChart3 className="w-5 h-5" />
+              <h2 className="font-semibold">Resumo Geral 2025</h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: 'Aulas Planejadas', value: kpi.planos, icon: <BookOpen className="w-4 h-4" /> },
+                { label: 'Total de Alunos', value: kpi.alunos, icon: <Users className="w-4 h-4" /> },
+                { label: 'Ocorrências', value: kpi.ocorrencias, icon: <Laptop className="w-4 h-4" /> },
+                { label: 'Turmas', value: kpi.turmas, icon: <School className="w-4 h-4" /> },
+              ].map(item => (
+                <div key={item.label} className="bg-white/10 rounded-lg p-3 text-center">
+                  <div className="flex justify-center mb-1 opacity-80">{item.icon}</div>
+                  <p className="text-2xl font-bold">{item.value}</p>
+                  <p className="text-xs opacity-75">{item.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      {tab === 'lembretes' && (
+        <div className="bg-card border border-border rounded-xl shadow-card p-4">
+          <PostItBoard />
         </div>
-      </div>
+      )}
     </div>
   );
 }
