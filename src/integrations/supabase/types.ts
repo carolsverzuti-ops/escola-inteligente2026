@@ -73,6 +73,7 @@ export type Database = {
       disciplinas: {
         Row: {
           carga_horaria: number | null
+          cor: string | null
           created_at: string | null
           id: string
           nome: string
@@ -80,6 +81,7 @@ export type Database = {
         }
         Insert: {
           carga_horaria?: number | null
+          cor?: string | null
           created_at?: string | null
           id?: string
           nome: string
@@ -87,6 +89,7 @@ export type Database = {
         }
         Update: {
           carga_horaria?: number | null
+          cor?: string | null
           created_at?: string | null
           id?: string
           nome?: string
@@ -299,64 +302,85 @@ export type Database = {
       planos_aula: {
         Row: {
           aprendizagem_essencial: string | null
+          aprovado_por: string | null
           aulas_previstas: number | null
           avaliacao_aprendizagem: string | null
           bimestre: number
+          comentario_aprovacao: string | null
           conteudo: string | null
           created_at: string | null
+          data_aprovacao: string | null
           data_aula: string
           desenvolvimento: string | null
           dia_semana: string | null
           disciplina_id: string | null
           duplicado_de: string | null
+          habilidades: string | null
           id: string
           material_digital: string | null
           numero_aulas: number | null
+          objetivo_geral: string | null
           objetivos: string | null
           professor: string | null
           recursos: string | null
+          status: string
+          tipo: string
           turma_id: string | null
           updated_at: string | null
         }
         Insert: {
           aprendizagem_essencial?: string | null
+          aprovado_por?: string | null
           aulas_previstas?: number | null
           avaliacao_aprendizagem?: string | null
           bimestre?: number
+          comentario_aprovacao?: string | null
           conteudo?: string | null
           created_at?: string | null
+          data_aprovacao?: string | null
           data_aula: string
           desenvolvimento?: string | null
           dia_semana?: string | null
           disciplina_id?: string | null
           duplicado_de?: string | null
+          habilidades?: string | null
           id?: string
           material_digital?: string | null
           numero_aulas?: number | null
+          objetivo_geral?: string | null
           objetivos?: string | null
           professor?: string | null
           recursos?: string | null
+          status?: string
+          tipo?: string
           turma_id?: string | null
           updated_at?: string | null
         }
         Update: {
           aprendizagem_essencial?: string | null
+          aprovado_por?: string | null
           aulas_previstas?: number | null
           avaliacao_aprendizagem?: string | null
           bimestre?: number
+          comentario_aprovacao?: string | null
           conteudo?: string | null
           created_at?: string | null
+          data_aprovacao?: string | null
           data_aula?: string
           desenvolvimento?: string | null
           dia_semana?: string | null
           disciplina_id?: string | null
           duplicado_de?: string | null
+          habilidades?: string | null
           id?: string
           material_digital?: string | null
           numero_aulas?: number | null
+          objetivo_geral?: string | null
           objetivos?: string | null
           professor?: string | null
           recursos?: string | null
+          status?: string
+          tipo?: string
           turma_id?: string | null
           updated_at?: string | null
         }
