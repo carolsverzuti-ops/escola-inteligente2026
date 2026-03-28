@@ -72,13 +72,13 @@ export function TableContainer({ children }: { children: React.ReactNode }) {
 }
 
 interface BadgeStatusProps {
-  situacao: 'Aprovado' | 'Recuperação' | 'Reprovado' | string;
+  situacao: 'Aprovado' | 'Recuperação' | 'Abaixo da média' | 'Reprovado' | string;
 }
 
 export function BadgeSituacao({ situacao }: BadgeStatusProps) {
   if (situacao === 'Aprovado') return <span className="status-badge status-aprovado">✓ Aprovado</span>;
   if (situacao === 'Recuperação') return <span className="status-badge status-recuperacao">⚠ Recuperação</span>;
-  return <span className="status-badge status-reprovado">✗ Reprovado</span>;
+  return <span className="status-badge status-reprovado">✗ Abaixo da média</span>;
 }
 
 export function EmptyState({ message = 'Nenhum dado encontrado', icon }: { message?: string; icon?: React.ReactNode }) {

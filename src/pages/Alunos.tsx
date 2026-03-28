@@ -1,13 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Plus, Edit2, Trash2, Search, Upload, Download, UserPlus, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Upload, Download, X } from 'lucide-react';
 import { PageHeader, FilterBar, TableContainer, EmptyState, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -18,11 +17,6 @@ interface Aluno {
   nome: string;
   numero_chamada: number;
   serie?: string;
-  data_nascimento?: string;
-  email?: string;
-  telefone?: string;
-  responsavel?: string;
-  observacoes?: string;
   ativo: boolean;
   turmas?: { nome: string; serie: string };
 }
@@ -36,7 +30,7 @@ export default function Alunos() {
   const [filterAtivo, setFilterAtivo] = useState('ativo');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingAluno, setEditingAluno] = useState<Aluno | null>(null);
-  const [form, setForm] = useState({ turma_id: '', nome: '', numero_chamada: 1, serie: '', email: '', telefone: '', responsavel: '', observacoes: '', ativo: true });
+  const [form, setForm] = useState({ turma_id: '', nome: '', numero_chamada: 1, serie: '', ativo: true });
   const [saving, setSaving] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -55,13 +49,13 @@ export default function Alunos() {
 
   function openNew() {
     setEditingAluno(null);
-    setForm({ turma_id: '', nome: '', numero_chamada: 1, serie: '', email: '', telefone: '', responsavel: '', observacoes: '', ativo: true });
+    setForm({ turma_id: '', nome: '', numero_chamada: 1, serie: '', ativo: true });
     setDialogOpen(true);
   }
 
   function openEdit(a: Aluno) {
     setEditingAluno(a);
-    setForm({ turma_id: a.turma_id, nome: a.nome, numero_chamada: a.numero_chamada || 1, serie: a.serie || '', email: a.email || '', telefone: a.telefone || '', responsavel: a.responsavel || '', observacoes: a.observacoes || '', ativo: a.ativo });
+    setForm({ turma_id: a.turma_id, nome: a.nome, numero_chamada: a.numero_chamada || 1, serie: a.serie || '', ativo: a.ativo });
     setDialogOpen(true);
   }
 
@@ -90,16 +84,16 @@ export default function Alunos() {
   }
 
   function downloadModelo() {
-    const csv = 'Nome Completo,Número Chamada,Turma,Série,Email,Telefone,Responsável,Observações\nAna Silva,1,7º A,7º Ano,ana@email.com,(11)99999-9999,Maria Silva,';
+    const csv = 'Nome Completo,Número Chamada,Série,Status\nAna Silva,1,7º Ano,Ativo';
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'modelo_importacao_alunos.csv'; a.click();
   }
 
   function exportarAlunos() {
-    const header = 'Número,Nome,Turma,Série,Email,Telefone,Responsável\n';
+    const header = 'Número,Nome,Turma,Série,Status\n';
     const rows = filtered.map(a =>
-      `${a.numero_chamada},"${a.nome}","${a.turmas?.nome || ''}","${a.serie || ''}","${a.email || ''}","${a.telefone || ''}","${a.responsavel || ''}"`
+      `${a.numero_chamada},"${a.nome}","${a.turmas?.nome || ''}","${a.serie || ''}","${a.ativo ? 'Ativo' : 'Inativo'}"`
     ).join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -113,16 +107,23 @@ export default function Alunos() {
     const lines = text.trim().split('\n').slice(1);
     const inserts: any[] = [];
     for (const line of lines) {
-      const cols = line.split(',');
+      const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
       if (!cols[0]) continue;
-      const turma = turmas.find(t => t.nome.toLowerCase() === (cols[2] || '').trim().toLowerCase());
-      inserts.push({ nome: cols[0].trim(), numero_chamada: parseInt(cols[1]) || 0, turma_id: turma?.id || null, serie: cols[3]?.trim() || '', email: cols[4]?.trim() || '', telefone: cols[5]?.trim() || '', responsavel: cols[6]?.trim() || '' });
+      const turma = turmas.find(t => t.nome.toLowerCase() === (cols[2] || '').toLowerCase() || t.serie.toLowerCase() === (cols[2] || '').toLowerCase());
+      inserts.push({
+        nome: cols[0],
+        numero_chamada: parseInt(cols[1]) || 0,
+        serie: cols[2] || '',
+        turma_id: turma?.id || null,
+        ativo: (cols[3] || 'Ativo').toLowerCase() !== 'inativo',
+      });
     }
     if (inserts.length > 0) {
       await supabase.from('alunos').insert(inserts);
       toast({ title: `${inserts.length} alunos importados!` });
       loadData();
     }
+    if (fileRef.current) fileRef.current.value = '';
   }
 
   const filtered = alunos.filter(a => {
@@ -173,23 +174,19 @@ export default function Alunos() {
                 <th>Nome Completo</th>
                 <th>Turma</th>
                 <th>Série</th>
-                <th>Responsável</th>
-                <th>Telefone</th>
                 <th>Status</th>
                 <th className="w-20 text-center">Ações</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={8} className="py-12 text-center text-muted-foreground">Nenhum aluno encontrado</td></tr>
+                <tr><td colSpan={6} className="py-12 text-center text-muted-foreground">Nenhum aluno encontrado</td></tr>
               ) : filtered.map((aluno, i) => (
                 <tr key={aluno.id} className={cn(i % 2 === 0 ? '' : 'bg-muted/20')}>
                   <td className="text-center font-mono text-sm font-semibold text-muted-foreground">{aluno.numero_chamada}</td>
                   <td className="font-medium">{aluno.nome}</td>
                   <td><Badge variant="outline" className="text-xs">{aluno.turmas?.nome}</Badge></td>
-                  <td className="text-sm text-muted-foreground">{aluno.serie}</td>
-                  <td className="text-sm">{aluno.responsavel || '—'}</td>
-                  <td className="text-sm">{aluno.telefone || '—'}</td>
+                  <td className="text-sm text-muted-foreground">{aluno.serie || aluno.turmas?.serie}</td>
                   <td>
                     <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', aluno.ativo ? 'bg-success-light text-success' : 'bg-secondary text-muted-foreground')}>
                       {aluno.ativo ? 'Ativo' : 'Inativo'}
@@ -213,49 +210,25 @@ export default function Alunos() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>{editingAluno ? 'Editar Aluno' : 'Novo Aluno'}</DialogTitle></DialogHeader>
           <div className="grid gap-3 py-2">
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2 space-y-1.5">
-                <Label>Nome Completo *</Label>
-                <Input placeholder="Nome completo" value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Nº Chamada</Label>
-                <Input type="number" value={form.numero_chamada} onChange={e => setForm({ ...form, numero_chamada: Number(e.target.value) })} />
-              </div>
+            <div className="space-y-1.5">
+              <Label>Nome Completo *</Label>
+              <Input placeholder="Nome completo" value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Turma *</Label>
                 <Select value={form.turma_id} onValueChange={v => setForm({ ...form, turma_id: v })}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar turma" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder="Selecionar" /></SelectTrigger>
                   <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label>Série</Label>
-                <Input placeholder="Ex: 7º Ano" value={form.serie} onChange={e => setForm({ ...form, serie: e.target.value })} />
+                <Label>Nº Chamada</Label>
+                <Input type="number" value={form.numero_chamada} onChange={e => setForm({ ...form, numero_chamada: Number(e.target.value) })} />
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label>Responsável</Label>
-                <Input placeholder="Nome do responsável" value={form.responsavel} onChange={e => setForm({ ...form, responsavel: e.target.value })} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Telefone</Label>
-                <Input placeholder="(11) 99999-9999" value={form.telefone} onChange={e => setForm({ ...form, telefone: e.target.value })} />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>E-mail</Label>
-              <Input placeholder="email@exemplo.com" type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Observações</Label>
-              <Textarea placeholder="Observações..." value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })} rows={2} />
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="ativo" checked={form.ativo} onChange={e => setForm({ ...form, ativo: e.target.checked })} className="rounded" />

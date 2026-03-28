@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Plus, Trash2, Download, GripVertical, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Download, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { PageHeader, FilterBar, BadgeSituacao, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,14 +18,6 @@ interface TipoAvaliacao {
   disciplina_id?: string;
   turma_id?: string;
   ordem: number;
-}
-
-interface Nota {
-  id?: string;
-  aluno_id: string;
-  tipo_avaliacao_id: string;
-  nota: number | null;
-  bimestre: number;
 }
 
 interface AlunoNota {
@@ -49,7 +41,7 @@ function calcularSituacao(media: number | null): string {
   if (media === null) return '—';
   if (media >= 7) return 'Aprovado';
   if (media >= 5) return 'Recuperação';
-  return 'Reprovado';
+  return 'Abaixo da média';
 }
 
 function gradeClass(nota: number | null): string {
@@ -89,7 +81,7 @@ export default function Notas() {
 
   async function loadNotas() {
     setLoading(true);
-    const [{ data: tipos }, { data: alunos }, { data: notasData }] = await Promise.all([
+    const [{ data: tipos }, { data: alunos }] = await Promise.all([
       supabase.from('tipos_avaliacao')
         .select('*')
         .eq('turma_id', filterTurma)
@@ -97,8 +89,6 @@ export default function Notas() {
         .eq('bimestre', parseInt(filterBimestre))
         .order('ordem'),
       supabase.from('alunos').select('id, nome, numero_chamada').eq('turma_id', filterTurma).eq('ativo', true).order('numero_chamada'),
-      supabase.from('notas').select('*').eq('bimestre', parseInt(filterBimestre))
-        .in('aluno_id', []),
     ]);
 
     const tiposArr: TipoAvaliacao[] = tipos || [];
@@ -207,7 +197,6 @@ export default function Notas() {
         </span>
       </FilterBar>
 
-      {/* Info dos tipos de avaliação */}
       {tiposAvaliacao.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-3">
           {tiposAvaliacao.map(t => (
@@ -242,7 +231,7 @@ export default function Notas() {
                     </th>
                   ))}
                   <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground border-b border-border min-w-[70px] bg-primary-light/30">Média</th>
-                  <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground border-b border-border min-w-[100px]">Situação</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground border-b border-border min-w-[120px]">Situação</th>
                 </tr>
               </thead>
               <tbody>
@@ -258,10 +247,7 @@ export default function Notas() {
                       return (
                         <td key={tipo.id} className="px-2 py-1 text-center border-b border-border/40">
                           <input
-                            type="number"
-                            min="0"
-                            max="10"
-                            step="0.1"
+                            type="number" min="0" max="10" step="0.1"
                             value={nota !== null && nota !== undefined ? nota : ''}
                             onChange={e => handleNotaChange(aluno.id, tipo.id, e.target.value)}
                             className={cn(
