@@ -120,7 +120,7 @@ export function ResultadosTable({ alunos, gabarito, anuladas, respostas, questoe
                 });
                 const nota = calcNota(aluno.id);
                 const temRespostas = questoes.some(q => resAl[q]);
-                const situacao = nota === null || !temRespostas ? null : nota >= (valorTotal * 0.7) ? 'Aprovado' : nota >= (valorTotal * 0.5) ? 'Recuperação' : 'Reprovado';
+                const situacao = nota === null || !temRespostas ? null : nota >= (valorTotal * 0.7) ? 'Aprovado' : nota >= (valorTotal * 0.5) ? 'Recuperação' : 'Abaixo da média';
                 return (
                   <tr key={aluno.id} className={cn('hover:bg-secondary/30 transition-colors', i % 2 ? 'bg-muted/10' : '')}>
                     <td className="px-3 py-2 font-mono sticky left-0 bg-inherit border-b border-border/40 z-10 text-muted-foreground">{aluno.numero_chamada}</td>
