@@ -7,12 +7,30 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+
+const CORES_DISCIPLINA: { value: string; label: string; dot: string }[] = [
+  { value: 'azul', label: 'Azul', dot: 'bg-blue-500' },
+  { value: 'roxo', label: 'Roxo', dot: 'bg-purple-500' },
+  { value: 'verde', label: 'Verde', dot: 'bg-green-500' },
+  { value: 'vermelho', label: 'Vermelho', dot: 'bg-red-500' },
+  { value: 'laranja', label: 'Laranja', dot: 'bg-orange-500' },
+  { value: 'rosa', label: 'Rosa', dot: 'bg-pink-500' },
+  { value: 'amarelo', label: 'Amarelo', dot: 'bg-yellow-500' },
+  { value: 'ciano', label: 'Ciano', dot: 'bg-cyan-500' },
+  { value: 'indigo', label: 'Índigo', dot: 'bg-indigo-500' },
+  { value: 'cinza', label: 'Cinza', dot: 'bg-gray-500' },
+];
+
+export function getDisciplinaDot(cor?: string) {
+  return CORES_DISCIPLINA.find(c => c.value === cor)?.dot || 'bg-blue-500';
+}
 
 export default function Configuracoes() {
   const [disciplinas, setDisciplinas] = useState<any[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ nome: '', professor: '', carga_horaria: 60 });
+  const [form, setForm] = useState({ nome: '', professor: '', carga_horaria: 60, cor: 'azul' });
   const { toast } = useToast();
 
   useEffect(() => { loadDisciplinas(); }, []);
@@ -38,7 +56,7 @@ export default function Configuracoes() {
   return (
     <div className="animate-fade-in">
       <PageHeader title="Configurações" subtitle="Gerencie disciplinas e configurações do sistema">
-        <Button size="sm" onClick={() => { setEditing(null); setForm({ nome: '', professor: '', carga_horaria: 60 }); setDialogOpen(true); }}><Plus className="w-4 h-4 mr-1.5" />Nova Disciplina</Button>
+        <Button size="sm" onClick={() => { setEditing(null); setForm({ nome: '', professor: '', carga_horaria: 60, cor: 'azul' }); setDialogOpen(true); }}><Plus className="w-4 h-4 mr-1.5" />Nova Disciplina</Button>
       </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -46,15 +64,18 @@ export default function Configuracoes() {
           <h2 className="text-sm font-semibold mb-3 text-foreground">Disciplinas Cadastradas</h2>
           <TableContainer>
             <table className="table-sheet">
-              <thead><tr><th>Disciplina</th><th>Professor</th><th className="text-center">CH</th><th className="w-20 text-center">Ações</th></tr></thead>
+              <thead><tr><th>Cor</th><th>Disciplina</th><th>Professor</th><th className="text-center">CH</th><th className="w-20 text-center">Ações</th></tr></thead>
               <tbody>
                 {disciplinas.map((d, i) => (
                   <tr key={d.id} className={i % 2 ? 'bg-muted/10' : ''}>
+                    <td className="w-10">
+                      <span className={cn('inline-block w-4 h-4 rounded-full', getDisciplinaDot(d.cor))} />
+                    </td>
                     <td className="font-medium">{d.nome}</td>
                     <td className="text-sm text-muted-foreground">{d.professor || '—'}</td>
                     <td className="text-center text-sm">{d.carga_horaria}h</td>
                     <td><div className="flex items-center justify-center gap-1">
-                      <button onClick={() => { setEditing(d); setForm({ nome: d.nome, professor: d.professor || '', carga_horaria: d.carga_horaria || 60 }); setDialogOpen(true); }} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"><Edit2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => { setEditing(d); setForm({ nome: d.nome, professor: d.professor || '', carga_horaria: d.carga_horaria || 60, cor: d.cor || 'azul' }); setDialogOpen(true); }} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"><Edit2 className="w-3.5 h-3.5" /></button>
                       <button onClick={() => remove(d.id)} className="p-1 rounded hover:bg-danger-light text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div></td>
                   </tr>
@@ -89,9 +110,20 @@ export default function Configuracoes() {
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>{editing ? 'Editar Disciplina' : 'Nova Disciplina'}</DialogTitle></DialogHeader>
           <div className="grid gap-3 py-2">
-            <div className="space-y-1.5"><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} placeholder="Ex: Matemática" /></div>
+            <div className="space-y-1.5"><Label>Nome *</Label><Input value={form.nome} onChange={e => setForm({ ...form, nome: e.target.value })} placeholder="Ex: Química" /></div>
             <div className="space-y-1.5"><Label>Professor</Label><Input value={form.professor} onChange={e => setForm({ ...form, professor: e.target.value })} placeholder="Prof. Nome" /></div>
             <div className="space-y-1.5"><Label>Carga Horária (h)</Label><Input type="number" value={form.carga_horaria} onChange={e => setForm({ ...form, carga_horaria: parseInt(e.target.value) })} /></div>
+            <div className="space-y-1.5">
+              <Label>Cor da Disciplina</Label>
+              <div className="flex flex-wrap gap-2">
+                {CORES_DISCIPLINA.map(c => (
+                  <button key={c.value} title={c.label} onClick={() => setForm({ ...form, cor: c.value })}
+                    className={cn('w-8 h-8 rounded-full border-2 transition-all', c.dot,
+                      form.cor === c.value ? 'border-foreground scale-110 shadow-md' : 'border-transparent')}>
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
