@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Plus, Trash2, Download, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Download, AlertCircle, GripVertical, FileSpreadsheet } from 'lucide-react';
 import { PageHeader, FilterBar, BadgeSituacao, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { getDisciplinaDot } from '@/pages/Configuracoes';
 
 interface TipoAvaliacao {
   id: string;
@@ -29,6 +30,30 @@ interface AlunoNota {
   situacao: string;
 }
 
+const DISC_BG: Record<string, string> = {
+  azul: 'bg-blue-500', roxo: 'bg-purple-500', verde: 'bg-green-500',
+  vermelho: 'bg-red-500', laranja: 'bg-orange-500', rosa: 'bg-pink-500',
+  amarelo: 'bg-yellow-500', ciano: 'bg-cyan-500', indigo: 'bg-indigo-500', cinza: 'bg-gray-500',
+};
+
+const DISC_BG_LIGHT: Record<string, string> = {
+  azul: 'bg-blue-50 dark:bg-blue-950/30', roxo: 'bg-purple-50 dark:bg-purple-950/30', verde: 'bg-green-50 dark:bg-green-950/30',
+  vermelho: 'bg-red-50 dark:bg-red-950/30', laranja: 'bg-orange-50 dark:bg-orange-950/30', rosa: 'bg-pink-50 dark:bg-pink-950/30',
+  amarelo: 'bg-yellow-50 dark:bg-yellow-950/30', ciano: 'bg-cyan-50 dark:bg-cyan-950/30', indigo: 'bg-indigo-50 dark:bg-indigo-950/30', cinza: 'bg-gray-50 dark:bg-gray-950/30',
+};
+
+const DISC_TEXT: Record<string, string> = {
+  azul: 'text-blue-700 dark:text-blue-300', roxo: 'text-purple-700 dark:text-purple-300', verde: 'text-green-700 dark:text-green-300',
+  vermelho: 'text-red-700 dark:text-red-300', laranja: 'text-orange-700 dark:text-orange-300', rosa: 'text-pink-700 dark:text-pink-300',
+  amarelo: 'text-yellow-700 dark:text-yellow-300', ciano: 'text-cyan-700 dark:text-cyan-300', indigo: 'text-indigo-700 dark:text-indigo-300', cinza: 'text-gray-700 dark:text-gray-300',
+};
+
+const DISC_BORDER: Record<string, string> = {
+  azul: 'border-blue-500', roxo: 'border-purple-500', verde: 'border-green-500',
+  vermelho: 'border-red-500', laranja: 'border-orange-500', rosa: 'border-pink-500',
+  amarelo: 'border-yellow-500', ciano: 'border-cyan-500', indigo: 'border-indigo-500', cinza: 'border-gray-500',
+};
+
 function calcularMedia(notas: Record<string, number | null>, tipos: TipoAvaliacao[]): number | null {
   const validos = tipos.filter(t => notas[t.id] !== null && notas[t.id] !== undefined);
   if (validos.length === 0) return null;
@@ -46,9 +71,9 @@ function calcularSituacao(media: number | null): string {
 
 function gradeClass(nota: number | null): string {
   if (nota === null) return '';
-  if (nota < 5) return 'grade-low';
-  if (nota < 7) return 'grade-warning';
-  return 'grade-ok';
+  if (nota < 5) return 'text-red-600 dark:text-red-400';
+  if (nota < 7) return 'text-yellow-600 dark:text-yellow-400';
+  return 'text-green-600 dark:text-green-400';
 }
 
 export default function Notas() {
@@ -62,7 +87,7 @@ export default function Notas() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [dialogTipo, setDialogTipo] = useState(false);
-  const [formTipo, setFormTipo] = useState({ nome: '', peso: 1.0, descricao: '' });
+  const [formTipo, setFormTipo] = useState({ nome: '', peso: 1.0 });
   const { toast } = useToast();
 
   useEffect(() => { loadFilters(); }, []);
@@ -71,7 +96,7 @@ export default function Notas() {
   async function loadFilters() {
     const [{ data: t }, { data: d }] = await Promise.all([
       supabase.from('turmas').select('id, nome, serie').order('nome'),
-      supabase.from('disciplinas').select('id, nome').order('nome'),
+      supabase.from('disciplinas').select('id, nome, cor').order('nome'),
     ]);
     setTurmas(t || []);
     setDisciplinas(d || []);
@@ -82,22 +107,17 @@ export default function Notas() {
   async function loadNotas() {
     setLoading(true);
     const [{ data: tipos }, { data: alunos }] = await Promise.all([
-      supabase.from('tipos_avaliacao')
-        .select('*')
-        .eq('turma_id', filterTurma)
-        .eq('disciplina_id', filterDisciplina)
-        .eq('bimestre', parseInt(filterBimestre))
-        .order('ordem'),
-      supabase.from('alunos').select('id, nome, numero_chamada').eq('turma_id', filterTurma).eq('ativo', true).order('numero_chamada'),
+      supabase.from('tipos_avaliacao').select('*')
+        .eq('turma_id', filterTurma).eq('disciplina_id', filterDisciplina)
+        .eq('bimestre', parseInt(filterBimestre)).order('ordem'),
+      supabase.from('alunos').select('id, nome, numero_chamada')
+        .eq('turma_id', filterTurma).eq('ativo', true).order('numero_chamada'),
     ]);
-
     const tiposArr: TipoAvaliacao[] = tipos || [];
     setTiposAvaliacao(tiposArr);
-
     if (!alunos?.length) { setAlunosNotas([]); setLoading(false); return; }
 
-    const { data: notasAll } = await supabase.from('notas')
-      .select('*')
+    const { data: notasAll } = await supabase.from('notas').select('*')
       .eq('bimestre', parseInt(filterBimestre))
       .in('aluno_id', alunos.map(a => a.id))
       .in('tipo_avaliacao_id', tiposArr.map(t => t.id));
@@ -125,7 +145,6 @@ export default function Notas() {
       const media = calcularMedia(novas, tiposAvaliacao);
       return { ...a, notas: novas, media, situacao: calcularSituacao(media) };
     }));
-
     const key = `${alunoId}-${tipoId}`;
     setSaving(s => ({ ...s, [key]: true }));
     if (nota === null) {
@@ -143,7 +162,7 @@ export default function Notas() {
       disciplina_id: filterDisciplina, turma_id: filterTurma, ordem: tiposAvaliacao.length + 1
     });
     setDialogTipo(false);
-    setFormTipo({ nome: '', peso: 1.0, descricao: '' });
+    setFormTipo({ nome: '', peso: 1.0 });
     loadNotas();
     toast({ title: 'Avaliação adicionada!' });
   }
@@ -154,24 +173,62 @@ export default function Notas() {
     loadNotas();
   }
 
-  function exportarNotas() {
+  function exportarCSV() {
     const header = ['Nº', 'Nome', ...tiposAvaliacao.map(t => t.nome), 'Média', 'Situação'].join(',');
     const rows = alunosNotas.map(a =>
       [a.numero_chamada, `"${a.nome}"`, ...tiposAvaliacao.map(t => a.notas[t.id] ?? ''), a.media?.toFixed(2) ?? '', a.situacao].join(',')
     );
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a'); link.href = url; link.download = 'notas.csv'; link.click();
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `notas_${discAtual?.nome || 'geral'}_${filterBimestre}bim.csv`;
+    link.click();
+  }
+
+  function exportarExcel() {
+    // Tab-separated for Excel compatibility
+    const discNome = discAtual?.nome || '';
+    const turmaNome = turmaAtual?.nome || '';
+    const header = `Notas - ${discNome} - ${turmaNome} - ${filterBimestre}º Bimestre\n\n`;
+    const cols = ['Nº', 'Nome', ...tiposAvaliacao.map(t => `${t.nome} (Peso ${t.peso})`), 'Média', 'Situação'].join('\t');
+    const rows = alunosNotas.map(a =>
+      [a.numero_chamada, a.nome, ...tiposAvaliacao.map(t => a.notas[t.id] ?? ''), a.media?.toFixed(2) ?? '', a.situacao].join('\t')
+    );
+    // Footer averages
+    const avgRow = ['', 'Média da Turma', ...tiposAvaliacao.map(tipo => {
+      const vals = alunosNotas.map(a => a.notas[tipo.id]).filter(v => v !== null && v !== undefined) as number[];
+      return vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : '';
+    }), (() => {
+      const medias = alunosNotas.map(a => a.media).filter(m => m !== null) as number[];
+      return medias.length ? (medias.reduce((a, b) => a + b, 0) / medias.length).toFixed(2) : '';
+    })(), ''].join('\t');
+
+    const content = header + [cols, ...rows, '', avgRow].join('\n');
+    const blob = new Blob(['\uFEFF' + content], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `notas_${discNome}_${filterBimestre}bim.xls`;
+    link.click();
   }
 
   const turmaAtual = turmas.find(t => t.id === filterTurma);
   const discAtual = disciplinas.find(d => d.id === filterDisciplina);
+  const cor = discAtual?.cor || 'azul';
+
+  const abaixoMedia = alunosNotas.filter(a => a.media !== null && a.media < 5).length;
+  const emRecuperacao = alunosNotas.filter(a => a.media !== null && a.media >= 5 && a.media < 7).length;
+  const aprovados = alunosNotas.filter(a => a.media !== null && a.media >= 7).length;
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Lançamento de Notas" subtitle="Tabela estilo planilha com cálculo automático">
-        <Button variant="outline" size="sm" onClick={exportarNotas}><Download className="w-4 h-4 mr-1.5" />Exportar</Button>
-        <Button size="sm" onClick={() => setDialogTipo(true)}><Plus className="w-4 h-4 mr-1.5" />Nova Avaliação</Button>
+      <PageHeader title="Lançamento de Notas" subtitle="Organizado por matéria com cores e cálculo automático">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={exportarCSV}><Download className="w-4 h-4 mr-1.5" />CSV</Button>
+          <Button variant="outline" size="sm" onClick={exportarExcel}><FileSpreadsheet className="w-4 h-4 mr-1.5" />Excel</Button>
+          <Button size="sm" onClick={() => setDialogTipo(true)}><Plus className="w-4 h-4 mr-1.5" />Nova Avaliação</Button>
+        </div>
       </PageHeader>
 
       <FilterBar>
@@ -180,8 +237,17 @@ export default function Notas() {
           <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
         </Select>
         <Select value={filterDisciplina} onValueChange={setFilterDisciplina}>
-          <SelectTrigger className="w-44 h-8 text-sm bg-background"><SelectValue placeholder="Disciplina" /></SelectTrigger>
-          <SelectContent>{disciplinas.map(d => <SelectItem key={d.id} value={d.id}>{d.nome}</SelectItem>)}</SelectContent>
+          <SelectTrigger className="w-48 h-8 text-sm bg-background"><SelectValue placeholder="Disciplina" /></SelectTrigger>
+          <SelectContent>
+            {disciplinas.map(d => (
+              <SelectItem key={d.id} value={d.id}>
+                <span className="flex items-center gap-2">
+                  <span className={cn('w-2.5 h-2.5 rounded-full', getDisciplinaDot(d.cor))} />
+                  {d.nome}
+                </span>
+              </SelectItem>
+            ))}
+          </SelectContent>
         </Select>
         <Select value={filterBimestre} onValueChange={setFilterBimestre}>
           <SelectTrigger className="w-36 h-8 text-sm bg-background"><SelectValue /></SelectTrigger>
@@ -192,15 +258,35 @@ export default function Notas() {
             <SelectItem value="4">4º Bimestre</SelectItem>
           </SelectContent>
         </Select>
-        <span className="text-xs text-muted-foreground ml-auto hidden sm:block">
-          {turmaAtual?.nome} · {discAtual?.nome} · {filterBimestre}º Bimestre
-        </span>
       </FilterBar>
 
+      {/* Discipline header banner */}
+      {filterTurma && filterDisciplina && (
+        <div className={cn('rounded-xl p-4 mb-4 border-2 flex items-center justify-between flex-wrap gap-3', DISC_BG_LIGHT[cor], DISC_BORDER[cor])}>
+          <div className="flex items-center gap-3">
+            <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-lg', DISC_BG[cor])}>
+              {discAtual?.nome?.charAt(0) || '?'}
+            </div>
+            <div>
+              <h2 className={cn('text-lg font-bold', DISC_TEXT[cor])}>{discAtual?.nome}</h2>
+              <p className="text-xs text-muted-foreground">{turmaAtual?.nome} · {filterBimestre}º Bimestre</p>
+            </div>
+          </div>
+          {alunosNotas.length > 0 && (
+            <div className="flex items-center gap-4 text-xs font-medium">
+              <span className="text-green-600 dark:text-green-400">✓ {aprovados} aprovados</span>
+              <span className="text-yellow-600 dark:text-yellow-400">⚠ {emRecuperacao} recuperação</span>
+              <span className="text-red-600 dark:text-red-400">✗ {abaixoMedia} abaixo</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Assessment type chips */}
       {tiposAvaliacao.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-3">
           {tiposAvaliacao.map(t => (
-            <div key={t.id} className="flex items-center gap-1.5 bg-card border border-border rounded-lg px-3 py-1.5 text-xs">
+            <div key={t.id} className={cn('flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-xs bg-card', `border-${cor === 'azul' ? 'blue' : cor}-200 dark:border-${cor}-800`)}>
               <span className="font-semibold">{t.nome}</span>
               <span className="text-muted-foreground">Peso: {t.peso}</span>
               <button onClick={() => removerTipo(t.id)} className="ml-1 text-muted-foreground hover:text-destructive transition-colors">
@@ -217,73 +303,85 @@ export default function Notas() {
           <p className="text-muted-foreground">Selecione a turma e a disciplina para visualizar as notas</p>
         </div>
       ) : loading ? <LoadingSpinner /> : (
-        <div className="bg-card border border-border rounded-xl shadow-card overflow-hidden">
+        <div className={cn('bg-card border-2 rounded-xl shadow-card overflow-hidden', DISC_BORDER[cor])}>
           <div className="overflow-x-auto scrollbar-thin">
             <table className="w-full text-sm border-collapse">
               <thead>
-                <tr className="bg-secondary">
-                  <th className="sticky left-0 z-20 bg-secondary px-3 py-2.5 text-left font-semibold text-muted-foreground border-b border-border w-8">Nº</th>
-                  <th className="sticky left-8 z-20 bg-secondary px-3 py-2.5 text-left font-semibold text-muted-foreground border-b border-border min-w-[180px]">Nome</th>
+                <tr className={cn(DISC_BG_LIGHT[cor])}>
+                  <th className={cn('sticky left-0 z-20 px-3 py-2.5 text-left font-semibold border-b border-border w-8', DISC_BG_LIGHT[cor], DISC_TEXT[cor])}>Nº</th>
+                  <th className={cn('sticky left-8 z-20 px-3 py-2.5 text-left font-semibold border-b border-border min-w-[180px]', DISC_BG_LIGHT[cor], DISC_TEXT[cor])}>Nome do Aluno</th>
                   {tiposAvaliacao.map(t => (
-                    <th key={t.id} className="px-2 py-2.5 text-center font-semibold text-muted-foreground border-b border-border min-w-[90px]">
+                    <th key={t.id} className={cn('px-2 py-2.5 text-center font-semibold border-b border-border min-w-[90px]', DISC_TEXT[cor])}>
                       <div>{t.nome}</div>
                       <div className="text-xs font-normal opacity-60">Peso {t.peso}</div>
                     </th>
                   ))}
-                  <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground border-b border-border min-w-[70px] bg-primary-light/30">Média</th>
-                  <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground border-b border-border min-w-[120px]">Situação</th>
+                  <th className={cn('px-3 py-2.5 text-center font-bold border-b border-border min-w-[70px]', DISC_BG[cor], 'text-white')}>Média</th>
+                  <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground border-b border-border min-w-[130px]">Situação</th>
                 </tr>
               </thead>
               <tbody>
                 {alunosNotas.length === 0 ? (
                   <tr><td colSpan={tiposAvaliacao.length + 4} className="py-12 text-center text-muted-foreground">Nenhum aluno nesta turma</td></tr>
-                ) : alunosNotas.map((aluno, i) => (
-                  <tr key={aluno.id} className={cn('hover:bg-primary-light/10 transition-colors', i % 2 === 0 ? '' : 'bg-muted/15')}>
-                    <td className="sticky left-0 z-10 bg-inherit px-3 py-1.5 font-mono text-xs text-muted-foreground border-b border-border/40">{aluno.numero_chamada}</td>
-                    <td className="sticky left-8 z-10 bg-inherit px-3 py-1.5 font-medium border-b border-border/40">{aluno.nome}</td>
-                    {tiposAvaliacao.map(tipo => {
-                      const key = `${aluno.id}-${tipo.id}`;
-                      const nota = aluno.notas[tipo.id];
-                      return (
-                        <td key={tipo.id} className="px-2 py-1 text-center border-b border-border/40">
-                          <input
-                            type="number" min="0" max="10" step="0.1"
-                            value={nota !== null && nota !== undefined ? nota : ''}
-                            onChange={e => handleNotaChange(aluno.id, tipo.id, e.target.value)}
-                            className={cn(
-                              'w-16 text-center text-sm font-semibold rounded-md border border-transparent bg-transparent py-1 focus:outline-none focus:border-primary focus:bg-white transition-all',
-                              nota !== null && nota !== undefined ? gradeClass(nota) : ''
-                            )}
-                            placeholder="—"
-                          />
-                          {saving[key] && <span className="ml-1 text-primary text-xs">...</span>}
-                        </td>
-                      );
-                    })}
-                    <td className={cn('px-3 py-1.5 text-center font-bold border-b border-border/40 bg-primary-light/20', aluno.media !== null ? gradeClass(aluno.media) : 'text-muted-foreground')}>
-                      {aluno.media !== null ? aluno.media.toFixed(2) : '—'}
-                    </td>
-                    <td className="px-3 py-1.5 text-center border-b border-border/40">
-                      {aluno.media !== null ? <BadgeSituacao situacao={aluno.situacao} /> : <span className="text-xs text-muted-foreground">—</span>}
-                    </td>
-                  </tr>
-                ))}
+                ) : alunosNotas.map((aluno, i) => {
+                  const isLow = aluno.media !== null && aluno.media < 5;
+                  return (
+                    <tr key={aluno.id} className={cn(
+                      'hover:bg-muted/30 transition-colors',
+                      i % 2 === 0 ? '' : 'bg-muted/10',
+                      isLow && 'bg-red-50/50 dark:bg-red-950/20'
+                    )}>
+                      <td className="sticky left-0 z-10 bg-inherit px-3 py-1.5 font-mono text-xs text-muted-foreground border-b border-border/40">{aluno.numero_chamada}</td>
+                      <td className={cn('sticky left-8 z-10 bg-inherit px-3 py-1.5 font-medium border-b border-border/40', isLow && 'text-red-600 dark:text-red-400')}>
+                        {aluno.nome}
+                        {isLow && <span className="ml-1.5 text-[10px] bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded-full">⚠</span>}
+                      </td>
+                      {tiposAvaliacao.map(tipo => {
+                        const key = `${aluno.id}-${tipo.id}`;
+                        const nota = aluno.notas[tipo.id];
+                        return (
+                          <td key={tipo.id} className="px-2 py-1 text-center border-b border-border/40">
+                            <div className="flex items-center justify-center gap-0.5">
+                              <input
+                                type="number" min="0" max="10" step="0.1"
+                                value={nota !== null && nota !== undefined ? nota : ''}
+                                onChange={e => handleNotaChange(aluno.id, tipo.id, e.target.value)}
+                                className={cn(
+                                  'w-16 text-center text-sm font-semibold rounded-md border border-transparent bg-transparent py-1 focus:outline-none focus:border-primary focus:bg-background transition-all',
+                                  nota !== null && nota !== undefined ? gradeClass(nota) : ''
+                                )}
+                                placeholder="—"
+                              />
+                              {saving[key] && <span className="text-primary text-xs animate-pulse">•</span>}
+                            </div>
+                          </td>
+                        );
+                      })}
+                      <td className={cn('px-3 py-1.5 text-center font-bold text-base border-b border-border/40', DISC_BG_LIGHT[cor], aluno.media !== null ? gradeClass(aluno.media) : 'text-muted-foreground')}>
+                        {aluno.media !== null ? aluno.media.toFixed(2) : '—'}
+                      </td>
+                      <td className="px-3 py-1.5 text-center border-b border-border/40">
+                        {aluno.media !== null ? <BadgeSituacao situacao={aluno.situacao} /> : <span className="text-xs text-muted-foreground">—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               {alunosNotas.length > 0 && (
                 <tfoot>
-                  <tr className="bg-secondary">
-                    <td className="sticky left-0 bg-secondary" />
-                    <td className="sticky left-8 bg-secondary px-3 py-2 text-xs font-semibold text-muted-foreground">Média da Turma</td>
+                  <tr className={cn(DISC_BG_LIGHT[cor])}>
+                    <td className={cn('sticky left-0', DISC_BG_LIGHT[cor])} />
+                    <td className={cn('sticky left-8 px-3 py-2 text-xs font-bold', DISC_BG_LIGHT[cor], DISC_TEXT[cor])}>Média da Turma</td>
                     {tiposAvaliacao.map(tipo => {
                       const vals = alunosNotas.map(a => a.notas[tipo.id]).filter(v => v !== null && v !== undefined) as number[];
                       const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
                       return (
-                        <td key={tipo.id} className="px-2 py-2 text-center text-xs font-bold text-muted-foreground">
+                        <td key={tipo.id} className={cn('px-2 py-2 text-center text-xs font-bold', DISC_TEXT[cor])}>
                           {avg !== null ? avg.toFixed(1) : '—'}
                         </td>
                       );
                     })}
-                    <td className="px-3 py-2 text-center text-xs font-bold text-primary">
+                    <td className={cn('px-3 py-2 text-center text-sm font-bold', DISC_BG[cor], 'text-white rounded-bl-none')}>
                       {(() => {
                         const medias = alunosNotas.map(a => a.media).filter(m => m !== null) as number[];
                         return medias.length ? (medias.reduce((a, b) => a + b, 0) / medias.length).toFixed(2) : '—';
@@ -304,7 +402,7 @@ export default function Notas() {
           <div className="grid gap-3 py-2">
             <div className="space-y-1.5">
               <Label>Nome da avaliação *</Label>
-              <Input placeholder="Ex: Prova Bimestral, Trabalho, Projeto..." value={formTipo.nome} onChange={e => setFormTipo({ ...formTipo, nome: e.target.value })} />
+              <Input placeholder="Ex: Prova, Trabalho, Projeto, Participação..." value={formTipo.nome} onChange={e => setFormTipo({ ...formTipo, nome: e.target.value })} />
             </div>
             <div className="space-y-1.5">
               <Label>Peso (para média ponderada)</Label>
