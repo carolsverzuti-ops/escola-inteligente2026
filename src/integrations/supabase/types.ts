@@ -14,6 +14,35 @@ export type Database = {
   }
   public: {
     Tables: {
+      ajustes_plano: {
+        Row: {
+          created_at: string
+          descricao: string
+          id: string
+          plano_id: string
+        }
+        Insert: {
+          created_at?: string
+          descricao: string
+          id?: string
+          plano_id: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string
+          id?: string
+          plano_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ajustes_plano_plano_id_fkey"
+            columns: ["plano_id"]
+            isOneToOne: false
+            referencedRelation: "planos_aula"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       alunos: {
         Row: {
           ativo: boolean | null
