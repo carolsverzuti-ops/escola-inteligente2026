@@ -21,6 +21,7 @@ const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
   { label: 'Turmas', icon: School, path: '/turmas' },
   { label: 'Alunos', icon: GraduationCap, path: '/alunos' },
+  { label: 'Matérias', icon: Palette, path: '/materias' },
   { label: 'Notas', icon: ClipboardList, path: '/notas' },
   { label: 'Plano de Aula', icon: BookOpen, path: '/plano-aula' },
   { label: 'Ocorrências de Notebook', icon: Laptop, path: '/ocorrencias' },
