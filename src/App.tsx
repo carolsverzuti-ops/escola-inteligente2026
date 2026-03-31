@@ -11,6 +11,7 @@ import Ocorrencias from "@/pages/Ocorrencias";
 import CorrecaoProvas from "@/pages/CorrecaoProvas";
 import Relatorios from "@/pages/Relatorios";
 import Configuracoes from "@/pages/Configuracoes";
+import Materias from "@/pages/Materias";
 
 const queryClient = new QueryClient();
 
