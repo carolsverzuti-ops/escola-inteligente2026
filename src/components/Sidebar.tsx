@@ -14,6 +14,7 @@ import {
   ChevronRight,
   School,
   Menu,
+  Palette,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
