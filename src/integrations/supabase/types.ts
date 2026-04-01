@@ -272,6 +272,38 @@ export type Database = {
           },
         ]
       }
+      ocorrencia_fotos: {
+        Row: {
+          created_at: string
+          id: string
+          ocorrencia_id: string
+          path: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ocorrencia_id: string
+          path: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ocorrencia_id?: string
+          path?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ocorrencia_fotos_ocorrencia_id_fkey"
+            columns: ["ocorrencia_id"]
+            isOneToOne: false
+            referencedRelation: "ocorrencias_notebook"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ocorrencias_notebook: {
         Row: {
           alunos_envolvidos: string | null
