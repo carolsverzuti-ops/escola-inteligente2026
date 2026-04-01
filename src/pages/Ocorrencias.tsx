@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Plus, Edit2, Trash2, Search, Laptop } from 'lucide-react';
-import { PageHeader, FilterBar, TableContainer, EmptyState, LoadingSpinner } from '@/components/ui-escola';
+import { Plus, Edit2, Trash2, Search, Camera, Image as ImageIcon, X, ZoomIn, FileText, Download } from 'lucide-react';
+import { PageHeader, FilterBar, TableContainer, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,108 +10,369 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+
+const SUPABASE_URL = "https://meozprygfkssbqrmnyhw.supabase.co";
+
+interface OcorrenciaFoto {
+  id: string;
+  ocorrencia_id: string;
+  url: string;
+  path: string;
+}
+
+const defaultForm = () => ({
+  turma_id: '',
+  data_ocorrencia: new Date().toISOString().split('T')[0],
+  quantidade_notebooks: 0,
+  alunos_envolvidos: '',
+  problema_encontrado: '',
+  descricao: '',
+  equipamento_danificado: false,
+  internet_funcionou: true,
+  solucao_adotada: '',
+  observacoes: '',
+});
 
 export default function Ocorrencias() {
   const [ocorrencias, setOcorrencias] = useState<any[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
+  const [fotos, setFotos] = useState<Record<string, OcorrenciaFoto[]>>({});
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filterTurma, setFilterTurma] = useState('all');
+  const [filterDataInicio, setFilterDataInicio] = useState('');
+  const [filterDataFim, setFilterDataFim] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
-  const [form, setForm] = useState({ turma_id: '', data_ocorrencia: new Date().toISOString().split('T')[0], quantidade_notebooks: 0, alunos_envolvidos: '', problema_encontrado: '', descricao: '', equipamento_danificado: false, internet_funcionou: true, solucao_adotada: '', observacoes: '' });
+  const [form, setForm] = useState(defaultForm());
   const [saving, setSaving] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [pendingPreviews, setPendingPreviews] = useState<string[]>([]);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   useEffect(() => { loadData(); }, []);
 
   async function loadData() {
-    const [{ data: oc }, { data: t }] = await Promise.all([
+    setLoading(true);
+    const [{ data: oc }, { data: t }, { data: f }] = await Promise.all([
       supabase.from('ocorrencias_notebook').select('*, turmas(nome)').order('data_ocorrencia', { ascending: false }),
       supabase.from('turmas').select('id, nome').order('nome'),
+      supabase.from('ocorrencia_fotos').select('*'),
     ]);
     setOcorrencias(oc || []);
     setTurmas(t || []);
+    const fotoMap: Record<string, OcorrenciaFoto[]> = {};
+    (f || []).forEach((foto: OcorrenciaFoto) => {
+      if (!fotoMap[foto.ocorrencia_id]) fotoMap[foto.ocorrencia_id] = [];
+      fotoMap[foto.ocorrencia_id].push(foto);
+    });
+    setFotos(fotoMap);
     setLoading(false);
   }
 
   function openNew() {
     setEditing(null);
-    setForm({ turma_id: '', data_ocorrencia: new Date().toISOString().split('T')[0], quantidade_notebooks: 0, alunos_envolvidos: '', problema_encontrado: '', descricao: '', equipamento_danificado: false, internet_funcionou: true, solucao_adotada: '', observacoes: '' });
+    setForm(defaultForm());
+    setPendingFiles([]);
+    setPendingPreviews([]);
     setDialogOpen(true);
   }
 
   function openEdit(o: any) {
     setEditing(o);
-    setForm({ turma_id: o.turma_id || '', data_ocorrencia: o.data_ocorrencia, quantidade_notebooks: o.quantidade_notebooks, alunos_envolvidos: o.alunos_envolvidos || '', problema_encontrado: o.problema_encontrado || '', descricao: o.descricao || '', equipamento_danificado: o.equipamento_danificado, internet_funcionou: o.internet_funcionou, solucao_adotada: o.solucao_adotada || '', observacoes: o.observacoes || '' });
+    setForm({
+      turma_id: o.turma_id || '',
+      data_ocorrencia: o.data_ocorrencia,
+      quantidade_notebooks: o.quantidade_notebooks,
+      alunos_envolvidos: o.alunos_envolvidos || '',
+      problema_encontrado: o.problema_encontrado || '',
+      descricao: o.descricao || '',
+      equipamento_danificado: o.equipamento_danificado,
+      internet_funcionou: o.internet_funcionou,
+      solucao_adotada: o.solucao_adotada || '',
+      observacoes: o.observacoes || '',
+    });
+    setPendingFiles([]);
+    setPendingPreviews([]);
     setDialogOpen(true);
+  }
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setPendingFiles(prev => [...prev, ...files]);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onload = ev => setPendingPreviews(prev => [...prev, ev.target?.result as string]);
+      reader.readAsDataURL(file);
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function removePendingFile(idx: number) {
+    setPendingFiles(prev => prev.filter((_, i) => i !== idx));
+    setPendingPreviews(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  async function uploadPhotos(ocorrenciaId: string) {
+    for (const file of pendingFiles) {
+      const ext = file.name.split('.').pop();
+      const path = `${ocorrenciaId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      const { error } = await supabase.storage.from('ocorrencias-fotos').upload(path, file);
+      if (error) { console.error('Upload error:', error); continue; }
+      const url = `${SUPABASE_URL}/storage/v1/object/public/ocorrencias-fotos/${path}`;
+      await supabase.from('ocorrencia_fotos').insert({ ocorrencia_id: ocorrenciaId, url, path });
+    }
   }
 
   async function save() {
     setSaving(true);
     const payload = { ...form, turma_id: form.turma_id || null };
-    if (editing) { await supabase.from('ocorrencias_notebook').update(payload).eq('id', editing.id); toast({ title: 'Ocorrência atualizada!' }); }
-    else { await supabase.from('ocorrencias_notebook').insert(payload); toast({ title: 'Ocorrência registrada!' }); }
-    setSaving(false); setDialogOpen(false); loadData();
+    let ocId = editing?.id;
+    if (editing) {
+      await supabase.from('ocorrencias_notebook').update(payload).eq('id', editing.id);
+      toast({ title: 'Ocorrência atualizada!' });
+    } else {
+      const { data } = await supabase.from('ocorrencias_notebook').insert(payload).select('id').single();
+      ocId = data?.id;
+      toast({ title: 'Ocorrência registrada!' });
+    }
+    if (ocId && pendingFiles.length > 0) {
+      await uploadPhotos(ocId);
+    }
+    setSaving(false);
+    setDialogOpen(false);
+    loadData();
+  }
+
+  async function removePhoto(foto: OcorrenciaFoto) {
+    await supabase.storage.from('ocorrencias-fotos').remove([foto.path]);
+    await supabase.from('ocorrencia_fotos').delete().eq('id', foto.id);
+    loadData();
+    toast({ title: 'Foto removida' });
   }
 
   async function remove(id: string) {
     if (!confirm('Excluir esta ocorrência?')) return;
+    // Delete associated photos from storage
+    const ocFotos = fotos[id] || [];
+    if (ocFotos.length > 0) {
+      await supabase.storage.from('ocorrencias-fotos').remove(ocFotos.map(f => f.path));
+    }
     await supabase.from('ocorrencias_notebook').delete().eq('id', id);
     loadData();
   }
 
   const formatDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR');
+
   const filtered = ocorrencias.filter(o => {
-    const ms = (o.problema_encontrado || '').toLowerCase().includes(search.toLowerCase()) || (o.descricao || '').toLowerCase().includes(search.toLowerCase());
+    const ms = (o.problema_encontrado || '').toLowerCase().includes(search.toLowerCase()) ||
+      (o.descricao || '').toLowerCase().includes(search.toLowerCase()) ||
+      (o.alunos_envolvidos || '').toLowerCase().includes(search.toLowerCase());
     const mt = filterTurma === 'all' || o.turma_id === filterTurma;
-    return ms && mt;
+    const md1 = !filterDataInicio || o.data_ocorrencia >= filterDataInicio;
+    const md2 = !filterDataFim || o.data_ocorrencia <= filterDataFim;
+    return ms && mt && md1 && md2;
   });
+
+  async function generatePdf() {
+    setGeneratingPdf(true);
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+
+      // Title
+      doc.setFontSize(16);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Relatório de Ocorrências de Notebook', pageWidth / 2, 20, { align: 'center' });
+
+      // Period / filters info
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+      let infoText = `Gerado em: ${new Date().toLocaleDateString('pt-BR')}`;
+      if (filterDataInicio || filterDataFim) {
+        infoText += ` | Período: ${filterDataInicio ? formatDate(filterDataInicio) : '—'} a ${filterDataFim ? formatDate(filterDataFim) : '—'}`;
+      }
+      if (filterTurma !== 'all') {
+        const turma = turmas.find(t => t.id === filterTurma);
+        if (turma) infoText += ` | Turma: ${turma.nome}`;
+      }
+      doc.text(infoText, pageWidth / 2, 28, { align: 'center' });
+
+      doc.setDrawColor(200);
+      doc.line(14, 32, pageWidth - 14, 32);
+
+      let yPos = 38;
+
+      for (const o of filtered) {
+        if (yPos > 250) { doc.addPage(); yPos = 20; }
+
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`${formatDate(o.data_ocorrencia)} — ${o.turmas?.nome || 'Sem turma'}`, 14, yPos);
+        yPos += 6;
+
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'normal');
+
+        const fields = [
+          ['Problema', o.problema_encontrado],
+          ['Descrição', o.descricao],
+          ['Notebooks', String(o.quantidade_notebooks || 0)],
+          ['Alunos', o.alunos_envolvidos],
+          ['Equip. danificado', o.equipamento_danificado ? 'Sim' : 'Não'],
+          ['Internet funcionou', o.internet_funcionou ? 'Sim' : 'Não'],
+          ['Solução', o.solucao_adotada],
+          ['Observações', o.observacoes],
+        ];
+
+        for (const [label, value] of fields) {
+          if (!value) continue;
+          if (yPos > 270) { doc.addPage(); yPos = 20; }
+          doc.setFont('helvetica', 'bold');
+          doc.text(`${label}: `, 16, yPos);
+          const labelWidth = doc.getTextWidth(`${label}: `);
+          doc.setFont('helvetica', 'normal');
+          const lines = doc.splitTextToSize(String(value), pageWidth - 30 - labelWidth);
+          doc.text(lines, 16 + labelWidth, yPos);
+          yPos += lines.length * 4.5;
+        }
+
+        // Photos
+        const ocFotos = fotos[o.id] || [];
+        if (ocFotos.length > 0) {
+          if (yPos > 220) { doc.addPage(); yPos = 20; }
+          doc.setFont('helvetica', 'bold');
+          doc.text('Fotos:', 16, yPos);
+          yPos += 5;
+
+          for (const foto of ocFotos) {
+            try {
+              const response = await fetch(foto.url);
+              const blob = await response.blob();
+              const dataUrl = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result as string);
+                reader.readAsDataURL(blob);
+              });
+              if (yPos > 220) { doc.addPage(); yPos = 20; }
+              doc.addImage(dataUrl, 'JPEG', 16, yPos, 50, 37);
+              yPos += 42;
+            } catch {
+              // skip image if can't fetch
+            }
+          }
+        }
+
+        // Separator
+        yPos += 4;
+        doc.setDrawColor(220);
+        doc.line(14, yPos, pageWidth - 14, yPos);
+        yPos += 6;
+      }
+
+      doc.save('relatorio-ocorrencias.pdf');
+      toast({ title: 'PDF gerado com sucesso!' });
+    } catch (err) {
+      console.error(err);
+      toast({ title: 'Erro ao gerar PDF', variant: 'destructive' });
+    }
+    setGeneratingPdf(false);
+  }
 
   return (
     <div className="animate-fade-in">
       <PageHeader title="Ocorrências de Notebook" subtitle={`${ocorrencias.length} ocorrências registradas`}>
+        <Button size="sm" variant="outline" onClick={generatePdf} disabled={generatingPdf || filtered.length === 0}>
+          <FileText className="w-4 h-4 mr-1.5" />{generatingPdf ? 'Gerando...' : 'Exportar PDF'}
+        </Button>
         <Button size="sm" onClick={openNew}><Plus className="w-4 h-4 mr-1.5" />Nova Ocorrência</Button>
       </PageHeader>
+
       <FilterBar>
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Buscar..." className="pl-8 h-8 text-sm bg-background" value={search} onChange={e => setSearch(e.target.value)} />
+          <Input placeholder="Buscar problema, descrição, aluno..." className="pl-8 h-8 text-sm bg-background" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
         <Select value={filterTurma} onValueChange={setFilterTurma}>
           <SelectTrigger className="w-36 h-8 text-sm bg-background"><SelectValue placeholder="Turma" /></SelectTrigger>
           <SelectContent><SelectItem value="all">Todas turmas</SelectItem>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
         </Select>
+        <div className="flex items-center gap-1.5">
+          <Label className="text-xs text-muted-foreground whitespace-nowrap">De:</Label>
+          <Input type="date" className="h-8 text-sm bg-background w-36" value={filterDataInicio} onChange={e => setFilterDataInicio(e.target.value)} />
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Label className="text-xs text-muted-foreground whitespace-nowrap">Até:</Label>
+          <Input type="date" className="h-8 text-sm bg-background w-36" value={filterDataFim} onChange={e => setFilterDataFim(e.target.value)} />
+        </div>
       </FilterBar>
+
       {loading ? <LoadingSpinner /> : (
         <TableContainer>
           <table className="table-sheet">
             <thead>
               <tr>
-                <th>Data</th><th>Turma</th><th>Qtd. Notebooks</th><th>Problema</th><th>Danificado</th><th>Internet</th><th>Solução</th><th className="w-20 text-center">Ações</th>
+                <th>Data</th><th>Turma</th><th>Notebooks</th><th>Problema</th><th>Danificado</th><th>Internet</th><th>Fotos</th><th>Solução</th><th className="w-20 text-center">Ações</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.length === 0 ? <tr><td colSpan={8} className="py-10 text-center text-muted-foreground">Nenhuma ocorrência</td></tr>
-              : filtered.map((o, i) => (
-                <tr key={o.id} className={cn(i % 2 ? 'bg-muted/10' : '')}>
-                  <td className="font-mono text-xs">{formatDate(o.data_ocorrencia)}</td>
-                  <td className="font-medium">{o.turmas?.nome || '—'}</td>
-                  <td className="text-center">{o.quantidade_notebooks}</td>
-                  <td className="max-w-xs"><div className="font-medium truncate">{o.problema_encontrado}</div><div className="text-xs text-muted-foreground truncate">{o.alunos_envolvidos}</div></td>
-                  <td className="text-center"><span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', o.equipamento_danificado ? 'bg-danger-light text-destructive' : 'bg-success-light text-success')}>{o.equipamento_danificado ? 'Sim' : 'Não'}</span></td>
-                  <td className="text-center"><span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', o.internet_funcionou ? 'bg-success-light text-success' : 'bg-danger-light text-destructive')}>{o.internet_funcionou ? 'Sim' : 'Não'}</span></td>
-                  <td className="text-xs text-muted-foreground max-w-[150px] truncate">{o.solucao_adotada || '—'}</td>
-                  <td><div className="flex items-center justify-center gap-1">
-                    <button onClick={() => openEdit(o)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"><Edit2 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => remove(o.id)} className="p-1 rounded hover:bg-danger-light text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
-                  </div></td>
-                </tr>
-              ))}
+              {filtered.length === 0 ? (
+                <tr><td colSpan={9} className="py-10 text-center text-muted-foreground">Nenhuma ocorrência encontrada</td></tr>
+              ) : filtered.map((o, i) => {
+                const ocFotos = fotos[o.id] || [];
+                return (
+                  <tr key={o.id} className={cn(i % 2 ? 'bg-muted/10' : '')}>
+                    <td className="font-mono text-xs">{formatDate(o.data_ocorrencia)}</td>
+                    <td className="font-medium">{o.turmas?.nome || '—'}</td>
+                    <td className="text-center">{o.quantidade_notebooks}</td>
+                    <td className="max-w-xs">
+                      <div className="font-medium truncate">{o.problema_encontrado}</div>
+                      <div className="text-xs text-muted-foreground truncate">{o.alunos_envolvidos}</div>
+                    </td>
+                    <td className="text-center">
+                      <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', o.equipamento_danificado ? 'bg-destructive/10 text-destructive' : 'bg-primary/10 text-primary')}>
+                        {o.equipamento_danificado ? 'Sim' : 'Não'}
+                      </span>
+                    </td>
+                    <td className="text-center">
+                      <span className={cn('text-xs font-semibold px-2 py-0.5 rounded-full', o.internet_funcionou ? 'bg-primary/10 text-primary' : 'bg-destructive/10 text-destructive')}>
+                        {o.internet_funcionou ? 'Sim' : 'Não'}
+                      </span>
+                    </td>
+                    <td className="text-center">
+                      {ocFotos.length > 0 ? (
+                        <div className="flex items-center justify-center gap-1">
+                          {ocFotos.slice(0, 3).map(f => (
+                            <button key={f.id} onClick={() => setLightboxUrl(f.url)} className="w-8 h-8 rounded border border-border overflow-hidden hover:ring-2 hover:ring-primary transition-all">
+                              <img src={f.url} alt="" className="w-full h-full object-cover" />
+                            </button>
+                          ))}
+                          {ocFotos.length > 3 && <span className="text-xs text-muted-foreground">+{ocFotos.length - 3}</span>}
+                        </div>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
+                    </td>
+                    <td className="text-xs text-muted-foreground max-w-[150px] truncate">{o.solucao_adotada || '—'}</td>
+                    <td>
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => openEdit(o)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"><Edit2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => remove(o.id)} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </TableContainer>
       )}
+
+      {/* Form Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editing ? 'Editar Ocorrência' : 'Nova Ocorrência'}</DialogTitle></DialogHeader>
@@ -126,15 +387,71 @@ export default function Ocorrencias() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>Qtd. Notebooks</Label><Input type="number" min={0} value={form.quantidade_notebooks} onChange={e => setForm({ ...form, quantidade_notebooks: parseInt(e.target.value) })} /></div>
+              <div className="space-y-1.5"><Label>Qtd. Notebooks</Label><Input type="number" min={0} value={form.quantidade_notebooks} onChange={e => setForm({ ...form, quantidade_notebooks: parseInt(e.target.value) || 0 })} /></div>
               <div className="space-y-1.5"><Label>Problema</Label><Input placeholder="Sem internet, travando..." value={form.problema_encontrado} onChange={e => setForm({ ...form, problema_encontrado: e.target.value })} /></div>
             </div>
             <div className="space-y-1.5"><Label>Alunos Envolvidos</Label><Input placeholder="Nomes dos alunos" value={form.alunos_envolvidos} onChange={e => setForm({ ...form, alunos_envolvidos: e.target.value })} /></div>
             <div className="space-y-1.5"><Label>Descrição</Label><Textarea rows={2} value={form.descricao} onChange={e => setForm({ ...form, descricao: e.target.value })} /></div>
             <div className="space-y-1.5"><Label>Solução Adotada</Label><Textarea rows={2} value={form.solucao_adotada} onChange={e => setForm({ ...form, solucao_adotada: e.target.value })} /></div>
+            <div className="space-y-1.5"><Label>Observações</Label><Textarea rows={2} value={form.observacoes} onChange={e => setForm({ ...form, observacoes: e.target.value })} /></div>
             <div className="flex gap-4">
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.equipamento_danificado} onChange={e => setForm({ ...form, equipamento_danificado: e.target.checked })} />Equipamento Danificado</label>
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.internet_funcionou} onChange={e => setForm({ ...form, internet_funcionou: e.target.checked })} />Internet Funcionou</label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={form.equipamento_danificado} onChange={e => setForm({ ...form, equipamento_danificado: e.target.checked })} className="rounded" />
+                Equipamento Danificado
+              </label>
+              <label className="flex items-center gap-2 text-sm cursor-pointer">
+                <input type="checkbox" checked={form.internet_funcionou} onChange={e => setForm({ ...form, internet_funcionou: e.target.checked })} className="rounded" />
+                Internet Funcionou
+              </label>
+            </div>
+
+            {/* Photos section */}
+            <div className="space-y-2 border-t border-border pt-3">
+              <Label className="flex items-center gap-1.5"><Camera className="w-4 h-4" /> Fotos da Ocorrência</Label>
+
+              {/* Existing photos (edit mode) */}
+              {editing && (fotos[editing.id] || []).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {(fotos[editing.id] || []).map(f => (
+                    <div key={f.id} className="relative group">
+                      <button onClick={() => setLightboxUrl(f.url)} className="w-16 h-16 rounded-lg border border-border overflow-hidden">
+                        <img src={f.url} alt="" className="w-full h-full object-cover" />
+                      </button>
+                      <button onClick={() => removePhoto(f)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Pending uploads */}
+              {pendingPreviews.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {pendingPreviews.map((src, idx) => (
+                    <div key={idx} className="relative group">
+                      <div className="w-16 h-16 rounded-lg border-2 border-dashed border-primary/40 overflow-hidden">
+                        <img src={src} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <button onClick={() => removePendingFile(idx)} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <input ref={fileInputRef} type="file" accept="image/*" multiple onChange={handleFileSelect} className="hidden" />
+                <Button type="button" size="sm" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  <ImageIcon className="w-4 h-4 mr-1" />Escolher Imagem
+                </Button>
+                <Button type="button" size="sm" variant="outline" onClick={() => {
+                  if (fileInputRef.current) { fileInputRef.current.setAttribute('capture', 'environment'); fileInputRef.current.click(); fileInputRef.current.removeAttribute('capture'); }
+                }}>
+                  <Camera className="w-4 h-4 mr-1" />Tirar Foto
+                </Button>
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -143,6 +460,16 @@ export default function Ocorrencias() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4" onClick={() => setLightboxUrl(null)}>
+          <button className="absolute top-4 right-4 text-white hover:text-white/80" onClick={() => setLightboxUrl(null)}>
+            <X className="w-8 h-8" />
+          </button>
+          <img src={lightboxUrl} alt="Foto da ocorrência" className="max-w-full max-h-[90vh] rounded-lg object-contain" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
     </div>
   );
 }
