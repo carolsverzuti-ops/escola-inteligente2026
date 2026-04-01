@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/toaster";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Sidebar, MobileSidebar } from "@/components/Sidebar";
 import Dashboard from "@/pages/Dashboard";
 import Turmas from "@/pages/Turmas";
@@ -12,6 +13,10 @@ import CorrecaoProvas from "@/pages/CorrecaoProvas";
 import Relatorios from "@/pages/Relatorios";
 import Configuracoes from "@/pages/Configuracoes";
 import Materias from "@/pages/Materias";
+import Login from "@/pages/Login";
+import Cadastro from "@/pages/Cadastro";
+import RecuperarSenha from "@/pages/RecuperarSenha";
+import RedefinirSenha from "@/pages/RedefinirSenha";
 
 const queryClient = new QueryClient();
 
@@ -31,24 +36,60 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function ProtectedRoutes() {
+  const { session, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return (
+    <Layout>
+      <Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/turmas" element={<Turmas />} />
+        <Route path="/alunos" element={<Alunos />} />
+        <Route path="/materias" element={<Materias />} />
+        <Route path="/notas" element={<Notas />} />
+        <Route path="/plano-aula" element={<PlanoAula />} />
+        <Route path="/ocorrencias" element={<Ocorrencias />} />
+        <Route path="/correcao-provas" element={<CorrecaoProvas />} />
+        <Route path="/relatorios" element={<Relatorios />} />
+        <Route path="/configuracoes" element={<Configuracoes />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Layout>
+  );
+}
+
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { session, loading } = useAuth();
+  if (loading) return null;
+  if (session) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <Toaster />
-      <Layout>
+      <AuthProvider>
         <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/turmas" element={<Turmas />} />
-          <Route path="/alunos" element={<Alunos />} />
-          <Route path="/materias" element={<Materias />} />
-          <Route path="/notas" element={<Notas />} />
-          <Route path="/plano-aula" element={<PlanoAula />} />
-          <Route path="/ocorrencias" element={<Ocorrencias />} />
-          <Route path="/correcao-provas" element={<CorrecaoProvas />} />
-          <Route path="/relatorios" element={<Relatorios />} />
-          <Route path="/configuracoes" element={<Configuracoes />} />
+          <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+          <Route path="/cadastro" element={<PublicRoute><Cadastro /></PublicRoute>} />
+          <Route path="/recuperar-senha" element={<PublicRoute><RecuperarSenha /></PublicRoute>} />
+          <Route path="/redefinir-senha" element={<RedefinirSenha />} />
+          <Route path="/*" element={<ProtectedRoutes />} />
         </Routes>
-      </Layout>
+      </AuthProvider>
     </BrowserRouter>
   </QueryClientProvider>
 );

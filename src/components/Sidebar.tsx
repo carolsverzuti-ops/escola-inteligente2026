@@ -15,8 +15,10 @@ import {
   School,
   Menu,
   Palette,
+  LogOut,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
@@ -34,6 +36,7 @@ const navItems = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { signOut, profile, role } = useAuth();
 
   return (
     <aside
@@ -54,6 +57,16 @@ export function Sidebar() {
           </div>
         )}
       </div>
+
+      {/* User info */}
+      {!collapsed && (
+        <div className="px-4 py-3 border-b border-sidebar-border">
+          <p className="text-xs text-sidebar-foreground/60 truncate">{profile?.nome || profile?.email}</p>
+          <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sidebar-primary/20 text-sidebar-primary capitalize">
+            {role || 'professor'}
+          </span>
+        </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2 scrollbar-thin">
@@ -84,8 +97,19 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* Collapse toggle */}
-      <div className="border-t border-sidebar-border p-2">
+      {/* Footer with logout + collapse */}
+      <div className="border-t border-sidebar-border p-2 space-y-1">
+        <button
+          onClick={signOut}
+          className={cn(
+            'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all text-sm',
+            collapsed && 'justify-center'
+          )}
+          title="Sair"
+        >
+          <LogOut className="w-4 h-4" />
+          {!collapsed && <span>Sair</span>}
+        </button>
         <button
           onClick={() => setCollapsed(!collapsed)}
           className={cn(
@@ -103,6 +127,7 @@ export function Sidebar() {
 export function MobileSidebar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const { signOut, profile, role } = useAuth();
 
   return (
     <>
@@ -125,6 +150,12 @@ export function MobileSidebar() {
                 <p className="text-xs text-sidebar-foreground/60">Inteligente</p>
               </div>
             </div>
+            <div className="px-4 py-3 border-b border-sidebar-border">
+              <p className="text-xs text-sidebar-foreground/60 truncate">{profile?.nome || profile?.email}</p>
+              <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sidebar-primary/20 text-sidebar-primary capitalize">
+                {role || 'professor'}
+              </span>
+            </div>
             <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
               {navItems.map((item) => {
                 const active = item.path === '/' ? location.pathname === '/' : location.pathname.startsWith(item.path);
@@ -146,6 +177,15 @@ export function MobileSidebar() {
                 );
               })}
             </nav>
+            <div className="border-t border-sidebar-border p-2">
+              <button
+                onClick={signOut}
+                className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all text-sm"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>Sair</span>
+              </button>
+            </div>
           </aside>
         </div>
       )}
