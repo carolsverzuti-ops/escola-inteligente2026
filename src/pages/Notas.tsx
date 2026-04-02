@@ -1,12 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Plus, Trash2, Download, AlertCircle, GripVertical, FileSpreadsheet } from 'lucide-react';
+import { Plus, Trash2, Download, AlertCircle, FileSpreadsheet, Pencil, ChevronLeft, ChevronRight, Check, X } from 'lucide-react';
 import { PageHeader, FilterBar, BadgeSituacao, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getDisciplinaDot } from '@/pages/Materias';
@@ -74,6 +75,82 @@ function gradeClass(nota: number | null): string {
   if (nota < 5) return 'text-red-600 dark:text-red-400';
   if (nota < 7) return 'text-yellow-600 dark:text-yellow-400';
   return 'text-green-600 dark:text-green-400';
+}
+
+function recalcularAlunos(alunos: AlunoNota[], tipos: TipoAvaliacao[]): AlunoNota[] {
+  return alunos.map(a => {
+    const media = calcularMedia(a.notas, tipos);
+    return { ...a, media, situacao: calcularSituacao(media) };
+  });
+}
+
+/* ─── Inline column editor popover ─── */
+function ColunaTipoEditor({
+  tipo, cor, index, total,
+  onUpdate, onDelete, onMove,
+}: {
+  tipo: TipoAvaliacao; cor: string; index: number; total: number;
+  onUpdate: (id: string, nome: string, peso: number) => void;
+  onDelete: (id: string) => void;
+  onMove: (id: string, dir: -1 | 1) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [nome, setNome] = useState(tipo.nome);
+  const [peso, setPeso] = useState(tipo.peso);
+
+  useEffect(() => { setNome(tipo.nome); setPeso(tipo.peso); }, [tipo]);
+
+  const salvar = () => {
+    if (!nome.trim()) return;
+    onUpdate(tipo.id, nome.trim(), peso);
+    setOpen(false);
+  };
+
+  return (
+    <th className={cn('px-2 py-2.5 text-center font-semibold border-b border-border min-w-[100px]', DISC_TEXT[cor])}>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button className="group flex flex-col items-center w-full hover:opacity-80 transition-opacity">
+            <span className="flex items-center gap-1">
+              {tipo.nome}
+              <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+            </span>
+            <span className="text-xs font-normal opacity-60">Peso {tipo.peso}</span>
+          </button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 p-3" align="center">
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Nome</Label>
+              <Input value={nome} onChange={e => setNome(e.target.value)} className="h-8 text-sm" autoFocus />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Peso</Label>
+              <Input type="number" min="0.1" max="10" step="0.1" value={peso} onChange={e => setPeso(parseFloat(e.target.value) || 1)} className="h-8 text-sm" />
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0} onClick={() => { onMove(tipo.id, -1); setOpen(false); }}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={index === total - 1} onClick={() => { onMove(tipo.id, 1); setOpen(false); }}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+              <div className="flex gap-1">
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => { onDelete(tipo.id); setOpen(false); }}>
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+                <Button size="sm" className="h-7 text-xs px-3" onClick={salvar}>
+                  <Check className="w-3.5 h-3.5 mr-1" />Salvar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    </th>
+  );
 }
 
 export default function Notas() {
@@ -167,6 +244,29 @@ export default function Notas() {
     toast({ title: 'Avaliação adicionada!' });
   }
 
+  async function atualizarTipo(id: string, nome: string, peso: number) {
+    await supabase.from('tipos_avaliacao').update({ nome, peso }).eq('id', id);
+    setTiposAvaliacao(prev => {
+      const updated = prev.map(t => t.id === id ? { ...t, nome, peso } : t);
+      setAlunosNotas(old => recalcularAlunos(old, updated));
+      return updated;
+    });
+    toast({ title: 'Avaliação atualizada!' });
+  }
+
+  async function moverTipo(id: string, dir: -1 | 1) {
+    const idx = tiposAvaliacao.findIndex(t => t.id === id);
+    if (idx < 0) return;
+    const newIdx = idx + dir;
+    if (newIdx < 0 || newIdx >= tiposAvaliacao.length) return;
+    const copy = [...tiposAvaliacao];
+    [copy[idx], copy[newIdx]] = [copy[newIdx], copy[idx]];
+    // update ordem for both
+    const updates = copy.map((t, i) => ({ ...t, ordem: i + 1 }));
+    setTiposAvaliacao(updates);
+    await Promise.all(updates.map(t => supabase.from('tipos_avaliacao').update({ ordem: t.ordem }).eq('id', t.id)));
+  }
+
   async function removerTipo(id: string) {
     if (!confirm('Remover esta avaliação? As notas serão excluídas.')) return;
     await supabase.from('tipos_avaliacao').delete().eq('id', id);
@@ -181,13 +281,10 @@ export default function Notas() {
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
-    link.download = `notas_${discAtual?.nome || 'geral'}_${filterBimestre}bim.csv`;
-    link.click();
+    link.href = url; link.download = `notas_${discAtual?.nome || 'geral'}_${filterBimestre}bim.csv`; link.click();
   }
 
   function exportarExcel() {
-    // Tab-separated for Excel compatibility
     const discNome = discAtual?.nome || '';
     const turmaNome = turmaAtual?.nome || '';
     const header = `Notas - ${discNome} - ${turmaNome} - ${filterBimestre}º Bimestre\n\n`;
@@ -195,7 +292,6 @@ export default function Notas() {
     const rows = alunosNotas.map(a =>
       [a.numero_chamada, a.nome, ...tiposAvaliacao.map(t => a.notas[t.id] ?? ''), a.media?.toFixed(2) ?? '', a.situacao].join('\t')
     );
-    // Footer averages
     const avgRow = ['', 'Média da Turma', ...tiposAvaliacao.map(tipo => {
       const vals = alunosNotas.map(a => a.notas[tipo.id]).filter(v => v !== null && v !== undefined) as number[];
       return vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : '';
@@ -208,9 +304,7 @@ export default function Notas() {
     const blob = new Blob(['\uFEFF' + content], { type: 'application/vnd.ms-excel;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
-    link.download = `notas_${discNome}_${filterBimestre}bim.xls`;
-    link.click();
+    link.href = url; link.download = `notas_${discNome}_${filterBimestre}bim.xls`; link.click();
   }
 
   const turmaAtual = turmas.find(t => t.id === filterTurma);
@@ -223,7 +317,7 @@ export default function Notas() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Lançamento de Notas" subtitle="Organizado por matéria com cores e cálculo automático">
+      <PageHeader title="Lançamento de Notas" subtitle="Clique no nome da avaliação para editar nome, peso ou reordenar">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={exportarCSV}><Download className="w-4 h-4 mr-1.5" />CSV</Button>
           <Button variant="outline" size="sm" onClick={exportarExcel}><FileSpreadsheet className="w-4 h-4 mr-1.5" />Excel</Button>
@@ -269,7 +363,7 @@ export default function Notas() {
             </div>
             <div>
               <h2 className={cn('text-lg font-bold', DISC_TEXT[cor])}>{discAtual?.nome}</h2>
-              <p className="text-xs text-muted-foreground">{turmaAtual?.nome} · {filterBimestre}º Bimestre</p>
+              <p className="text-xs text-muted-foreground">{turmaAtual?.nome} · {filterBimestre}º Bimestre · {tiposAvaliacao.length} avaliações</p>
             </div>
           </div>
           {alunosNotas.length > 0 && (
@@ -279,21 +373,6 @@ export default function Notas() {
               <span className="text-red-600 dark:text-red-400">✗ {abaixoMedia} abaixo</span>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Assessment type chips */}
-      {tiposAvaliacao.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-3">
-          {tiposAvaliacao.map(t => (
-            <div key={t.id} className={cn('flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-xs bg-card', `border-${cor === 'azul' ? 'blue' : cor}-200 dark:border-${cor}-800`)}>
-              <span className="font-semibold">{t.nome}</span>
-              <span className="text-muted-foreground">Peso: {t.peso}</span>
-              <button onClick={() => removerTipo(t.id)} className="ml-1 text-muted-foreground hover:text-destructive transition-colors">
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
-          ))}
         </div>
       )}
 
@@ -310,11 +389,17 @@ export default function Notas() {
                 <tr className={cn(DISC_BG_LIGHT[cor])}>
                   <th className={cn('sticky left-0 z-20 px-3 py-2.5 text-left font-semibold border-b border-border w-8', DISC_BG_LIGHT[cor], DISC_TEXT[cor])}>Nº</th>
                   <th className={cn('sticky left-8 z-20 px-3 py-2.5 text-left font-semibold border-b border-border min-w-[180px]', DISC_BG_LIGHT[cor], DISC_TEXT[cor])}>Nome do Aluno</th>
-                  {tiposAvaliacao.map(t => (
-                    <th key={t.id} className={cn('px-2 py-2.5 text-center font-semibold border-b border-border min-w-[90px]', DISC_TEXT[cor])}>
-                      <div>{t.nome}</div>
-                      <div className="text-xs font-normal opacity-60">Peso {t.peso}</div>
-                    </th>
+                  {tiposAvaliacao.map((t, i) => (
+                    <ColunaTipoEditor
+                      key={t.id}
+                      tipo={t}
+                      cor={cor}
+                      index={i}
+                      total={tiposAvaliacao.length}
+                      onUpdate={atualizarTipo}
+                      onDelete={removerTipo}
+                      onMove={moverTipo}
+                    />
                   ))}
                   <th className={cn('px-3 py-2.5 text-center font-bold border-b border-border min-w-[70px]', DISC_BG[cor], 'text-white')}>Média</th>
                   <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground border-b border-border min-w-[130px]">Situação</th>
