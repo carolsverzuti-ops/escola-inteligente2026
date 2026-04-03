@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, KeyboardEvent, ClipboardEvent } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Plus, Trash2, Download, AlertCircle, FileSpreadsheet, Pencil, ChevronLeft, ChevronRight, Check, X } from 'lucide-react';
+import { Plus, Trash2, Download, AlertCircle, FileSpreadsheet, Pencil, ChevronLeft, ChevronRight, Check, Clipboard, Info } from 'lucide-react';
 import { PageHeader, FilterBar, BadgeSituacao, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -84,6 +84,14 @@ function recalcularAlunos(alunos: AlunoNota[], tipos: TipoAvaliacao[]): AlunoNot
   });
 }
 
+function parseNota(raw: string): number | null {
+  const cleaned = raw.replace(',', '.').trim();
+  if (cleaned === '' || cleaned === '—' || cleaned === '-') return null;
+  const val = parseFloat(cleaned);
+  if (isNaN(val)) return null;
+  return Math.min(10, Math.max(0, Math.round(val * 10) / 10));
+}
+
 /* ─── Inline column editor popover ─── */
 function ColunaTipoEditor({
   tipo, cor, index, total,
@@ -153,6 +161,44 @@ function ColunaTipoEditor({
   );
 }
 
+/* ─── Spreadsheet Cell ─── */
+function SpreadsheetCell({
+  value, isFocused, onFocus, onChange, onKeyDown, onPaste, inputRef, saving,
+}: {
+  value: number | null;
+  isFocused: boolean;
+  onFocus: () => void;
+  onChange: (val: string) => void;
+  onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
+  onPaste: (e: ClipboardEvent<HTMLInputElement>) => void;
+  inputRef: (el: HTMLInputElement | null) => void;
+  saving: boolean;
+}) {
+  return (
+    <td className={cn(
+      'px-0 py-0 text-center border border-border/30 relative transition-all',
+      isFocused && 'ring-2 ring-primary ring-inset z-10'
+    )}>
+      <input
+        ref={inputRef}
+        type="text"
+        inputMode="decimal"
+        value={value !== null && value !== undefined ? value : ''}
+        onChange={e => onChange(e.target.value)}
+        onFocus={onFocus}
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+        className={cn(
+          'w-full h-9 text-center text-sm font-semibold bg-transparent focus:outline-none focus:bg-background transition-colors',
+          value !== null && value !== undefined ? gradeClass(value) : 'text-muted-foreground'
+        )}
+        placeholder="—"
+      />
+      {saving && <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />}
+    </td>
+  );
+}
+
 export default function Notas() {
   const [turmas, setTurmas] = useState<any[]>([]);
   const [disciplinas, setDisciplinas] = useState<any[]>([]);
@@ -165,7 +211,33 @@ export default function Notas() {
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [dialogTipo, setDialogTipo] = useState(false);
   const [formTipo, setFormTipo] = useState({ nome: '', peso: 1.0 });
+  const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
+  const [pasteCount, setPasteCount] = useState(0);
   const { toast } = useToast();
+
+  const cellRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const tiposRef = useRef(tiposAvaliacao);
+  tiposRef.current = tiposAvaliacao;
+  const alunosRef = useRef(alunosNotas);
+  alunosRef.current = alunosNotas;
+
+  const getCellKey = (row: number, col: number) => `${row}-${col}`;
+  const setCellRef = (row: number, col: number) => (el: HTMLInputElement | null) => {
+    const key = getCellKey(row, col);
+    if (el) cellRefs.current.set(key, el);
+    else cellRefs.current.delete(key);
+  };
+
+  const focusCellAt = useCallback((row: number, col: number) => {
+    const maxRow = alunosRef.current.length - 1;
+    const maxCol = tiposRef.current.length - 1;
+    if (row < 0 || row > maxRow || col < 0 || col > maxCol) return;
+    setFocusCell({ row, col });
+    setTimeout(() => {
+      const el = cellRefs.current.get(getCellKey(row, col));
+      if (el) { el.focus(); el.select(); }
+    }, 0);
+  }, []);
 
   useEffect(() => { loadFilters(); }, []);
   useEffect(() => { if (filterTurma && filterDisciplina) loadNotas(); }, [filterTurma, filterDisciplina, filterBimestre]);
@@ -183,6 +255,7 @@ export default function Notas() {
 
   async function loadNotas() {
     setLoading(true);
+    setFocusCell(null);
     const [{ data: tipos }, { data: alunos }] = await Promise.all([
       supabase.from('tipos_avaliacao').select('*')
         .eq('turma_id', filterTurma).eq('disciplina_id', filterDisciplina)
@@ -214,23 +287,135 @@ export default function Notas() {
     setLoading(false);
   }
 
-  const handleNotaChange = useCallback(async (alunoId: string, tipoId: string, value: string) => {
-    const nota = value === '' ? null : Math.min(10, Math.max(0, parseFloat(value)));
-    setAlunosNotas(prev => prev.map(a => {
-      if (a.id !== alunoId) return a;
-      const novas = { ...a.notas, [tipoId]: nota };
-      const media = calcularMedia(novas, tiposAvaliacao);
-      return { ...a, notas: novas, media, situacao: calcularSituacao(media) };
-    }));
+  const persistNota = useCallback(async (alunoId: string, tipoId: string, nota: number | null) => {
     const key = `${alunoId}-${tipoId}`;
     setSaving(s => ({ ...s, [key]: true }));
     if (nota === null) {
       await supabase.from('notas').delete().eq('aluno_id', alunoId).eq('tipo_avaliacao_id', tipoId);
     } else {
-      await supabase.from('notas').upsert({ aluno_id: alunoId, tipo_avaliacao_id: tipoId, nota, bimestre: parseInt(filterBimestre) }, { onConflict: 'aluno_id,tipo_avaliacao_id' });
+      await supabase.from('notas').upsert(
+        { aluno_id: alunoId, tipo_avaliacao_id: tipoId, nota, bimestre: parseInt(filterBimestre) },
+        { onConflict: 'aluno_id,tipo_avaliacao_id' }
+      );
     }
     setSaving(s => ({ ...s, [key]: false }));
-  }, [tiposAvaliacao, filterBimestre]);
+  }, [filterBimestre]);
+
+  const handleCellChange = useCallback((rowIdx: number, colIdx: number, rawValue: string) => {
+    const nota = parseNota(rawValue);
+    const aluno = alunosRef.current[rowIdx];
+    const tipo = tiposRef.current[colIdx];
+    if (!aluno || !tipo) return;
+
+    setAlunosNotas(prev => prev.map((a, i) => {
+      if (i !== rowIdx) return a;
+      const novas = { ...a.notas, [tipo.id]: nota };
+      const media = calcularMedia(novas, tiposRef.current);
+      return { ...a, notas: novas, media, situacao: calcularSituacao(media) };
+    }));
+
+    persistNota(aluno.id, tipo.id, nota);
+  }, [persistNota]);
+
+  const handleCellKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>, row: number, col: number) => {
+    const maxRow = alunosRef.current.length - 1;
+    const maxCol = tiposRef.current.length - 1;
+
+    switch (e.key) {
+      case 'Enter':
+        e.preventDefault();
+        focusCellAt(Math.min(row + 1, maxRow), col);
+        break;
+      case 'Tab':
+        e.preventDefault();
+        if (e.shiftKey) {
+          if (col > 0) focusCellAt(row, col - 1);
+          else if (row > 0) focusCellAt(row - 1, maxCol);
+        } else {
+          if (col < maxCol) focusCellAt(row, col + 1);
+          else if (row < maxRow) focusCellAt(row + 1, 0);
+        }
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        focusCellAt(Math.min(row + 1, maxRow), col);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        focusCellAt(Math.max(row - 1, 0), col);
+        break;
+      case 'ArrowRight':
+        if ((e.target as HTMLInputElement).selectionStart === (e.target as HTMLInputElement).value.length) {
+          e.preventDefault();
+          focusCellAt(row, Math.min(col + 1, maxCol));
+        }
+        break;
+      case 'ArrowLeft':
+        if ((e.target as HTMLInputElement).selectionStart === 0) {
+          e.preventDefault();
+          focusCellAt(row, Math.max(col - 1, 0));
+        }
+        break;
+      case 'Escape':
+        (e.target as HTMLInputElement).blur();
+        setFocusCell(null);
+        break;
+    }
+  }, [focusCellAt]);
+
+  const handlePaste = useCallback((e: ClipboardEvent<HTMLInputElement>, startRow: number, startCol: number) => {
+    const text = e.clipboardData.getData('text/plain');
+    if (!text) return;
+
+    const rows = text.split(/\r?\n/).filter(r => r.trim() !== '');
+    // If only one value, let the default input behavior handle it
+    if (rows.length === 1 && !rows[0].includes('\t')) return;
+
+    e.preventDefault();
+
+    const maxRow = alunosRef.current.length;
+    const maxCol = tiposRef.current.length;
+    let count = 0;
+    const updates: { rowIdx: number; colIdx: number; nota: number | null }[] = [];
+
+    rows.forEach((rowStr, ri) => {
+      const cells = rowStr.split('\t');
+      cells.forEach((cellStr, ci) => {
+        const r = startRow + ri;
+        const c = startCol + ci;
+        if (r >= maxRow || c >= maxCol) return;
+        const nota = parseNota(cellStr);
+        updates.push({ rowIdx: r, colIdx: c, nota });
+        count++;
+      });
+    });
+
+    if (updates.length === 0) return;
+
+    // Apply all at once
+    setAlunosNotas(prev => {
+      const copy = [...prev];
+      updates.forEach(({ rowIdx, colIdx, nota }) => {
+        const aluno = copy[rowIdx];
+        const tipo = tiposRef.current[colIdx];
+        if (!aluno || !tipo) return;
+        const novas = { ...aluno.notas, [tipo.id]: nota };
+        const media = calcularMedia(novas, tiposRef.current);
+        copy[rowIdx] = { ...aluno, notas: novas, media, situacao: calcularSituacao(media) };
+      });
+      return copy;
+    });
+
+    // Persist all
+    updates.forEach(({ rowIdx, colIdx, nota }) => {
+      const aluno = alunosRef.current[rowIdx];
+      const tipo = tiposRef.current[colIdx];
+      if (aluno && tipo) persistNota(aluno.id, tipo.id, nota);
+    });
+
+    setPasteCount(count);
+    toast({ title: `${count} notas coladas com sucesso!`, description: 'As notas foram distribuídas automaticamente.' });
+  }, [persistNota, toast]);
 
   async function adicionarTipoAvaliacao() {
     if (!formTipo.nome) return;
@@ -261,7 +446,6 @@ export default function Notas() {
     if (newIdx < 0 || newIdx >= tiposAvaliacao.length) return;
     const copy = [...tiposAvaliacao];
     [copy[idx], copy[newIdx]] = [copy[newIdx], copy[idx]];
-    // update ordem for both
     const updates = copy.map((t, i) => ({ ...t, ordem: i + 1 }));
     setTiposAvaliacao(updates);
     await Promise.all(updates.map(t => supabase.from('tipos_avaliacao').update({ ordem: t.ordem }).eq('id', t.id)));
@@ -317,7 +501,7 @@ export default function Notas() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Lançamento de Notas" subtitle="Clique no nome da avaliação para editar nome, peso ou reordenar">
+      <PageHeader title="Lançamento de Notas" subtitle="Planilha de notas — use Tab, Enter, setas e cole notas do Excel">
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={exportarCSV}><Download className="w-4 h-4 mr-1.5" />CSV</Button>
           <Button variant="outline" size="sm" onClick={exportarExcel}><FileSpreadsheet className="w-4 h-4 mr-1.5" />Excel</Button>
@@ -366,13 +550,28 @@ export default function Notas() {
               <p className="text-xs text-muted-foreground">{turmaAtual?.nome} · {filterBimestre}º Bimestre · {tiposAvaliacao.length} avaliações</p>
             </div>
           </div>
-          {alunosNotas.length > 0 && (
-            <div className="flex items-center gap-4 text-xs font-medium">
-              <span className="text-green-600 dark:text-green-400">✓ {aprovados} aprovados</span>
-              <span className="text-yellow-600 dark:text-yellow-400">⚠ {emRecuperacao} recuperação</span>
-              <span className="text-red-600 dark:text-red-400">✗ {abaixoMedia} abaixo</span>
-            </div>
-          )}
+          <div className="flex items-center gap-4">
+            {alunosNotas.length > 0 && (
+              <div className="flex items-center gap-4 text-xs font-medium">
+                <span className="text-green-600 dark:text-green-400">✓ {aprovados} aprovados</span>
+                <span className="text-yellow-600 dark:text-yellow-400">⚠ {emRecuperacao} recuperação</span>
+                <span className="text-red-600 dark:text-red-400">✗ {abaixoMedia} abaixo</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Paste tip */}
+      {filterTurma && filterDisciplina && tiposAvaliacao.length > 0 && alunosNotas.length > 0 && (
+        <div className="flex items-center gap-2 mb-3 px-1 text-xs text-muted-foreground">
+          <Clipboard className="w-3.5 h-3.5" />
+          <span>
+            <strong>Dica:</strong> Copie notas do Excel e cole diretamente na célula — as notas serão distribuídas automaticamente.
+            Use <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono mx-0.5">Tab</kbd> 
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono mx-0.5">Enter</kbd> 
+            <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono mx-0.5">↑↓←→</kbd> para navegar.
+          </span>
         </div>
       )}
 
@@ -408,12 +607,12 @@ export default function Notas() {
               <tbody>
                 {alunosNotas.length === 0 ? (
                   <tr><td colSpan={tiposAvaliacao.length + 4} className="py-12 text-center text-muted-foreground">Nenhum aluno nesta turma</td></tr>
-                ) : alunosNotas.map((aluno, i) => {
+                ) : alunosNotas.map((aluno, rowIdx) => {
                   const isLow = aluno.media !== null && aluno.media < 5;
                   return (
                     <tr key={aluno.id} className={cn(
-                      'hover:bg-muted/30 transition-colors',
-                      i % 2 === 0 ? '' : 'bg-muted/10',
+                      'transition-colors',
+                      rowIdx % 2 === 0 ? '' : 'bg-muted/10',
                       isLow && 'bg-red-50/50 dark:bg-red-950/20'
                     )}>
                       <td className="sticky left-0 z-10 bg-inherit px-3 py-1.5 font-mono text-xs text-muted-foreground border-b border-border/40">{aluno.numero_chamada}</td>
@@ -421,25 +620,20 @@ export default function Notas() {
                         {aluno.nome}
                         {isLow && <span className="ml-1.5 text-[10px] bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400 px-1.5 py-0.5 rounded-full">⚠</span>}
                       </td>
-                      {tiposAvaliacao.map(tipo => {
-                        const key = `${aluno.id}-${tipo.id}`;
-                        const nota = aluno.notas[tipo.id];
+                      {tiposAvaliacao.map((tipo, colIdx) => {
+                        const savingKey = `${aluno.id}-${tipo.id}`;
                         return (
-                          <td key={tipo.id} className="px-2 py-1 text-center border-b border-border/40">
-                            <div className="flex items-center justify-center gap-0.5">
-                              <input
-                                type="number" min="0" max="10" step="0.1"
-                                value={nota !== null && nota !== undefined ? nota : ''}
-                                onChange={e => handleNotaChange(aluno.id, tipo.id, e.target.value)}
-                                className={cn(
-                                  'w-16 text-center text-sm font-semibold rounded-md border border-transparent bg-transparent py-1 focus:outline-none focus:border-primary focus:bg-background transition-all',
-                                  nota !== null && nota !== undefined ? gradeClass(nota) : ''
-                                )}
-                                placeholder="—"
-                              />
-                              {saving[key] && <span className="text-primary text-xs animate-pulse">•</span>}
-                            </div>
-                          </td>
+                          <SpreadsheetCell
+                            key={tipo.id}
+                            value={aluno.notas[tipo.id] ?? null}
+                            isFocused={focusCell?.row === rowIdx && focusCell?.col === colIdx}
+                            onFocus={() => setFocusCell({ row: rowIdx, col: colIdx })}
+                            onChange={(val) => handleCellChange(rowIdx, colIdx, val)}
+                            onKeyDown={(e) => handleCellKeyDown(e, rowIdx, colIdx)}
+                            onPaste={(e) => handlePaste(e, rowIdx, colIdx)}
+                            inputRef={setCellRef(rowIdx, colIdx)}
+                            saving={!!saving[savingKey]}
+                          />
                         );
                       })}
                       <td className={cn('px-3 py-1.5 text-center font-bold text-base border-b border-border/40', DISC_BG_LIGHT[cor], aluno.media !== null ? gradeClass(aluno.media) : 'text-muted-foreground')}>
@@ -461,12 +655,12 @@ export default function Notas() {
                       const vals = alunosNotas.map(a => a.notas[tipo.id]).filter(v => v !== null && v !== undefined) as number[];
                       const avg = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
                       return (
-                        <td key={tipo.id} className={cn('px-2 py-2 text-center text-xs font-bold', DISC_TEXT[cor])}>
+                        <td key={tipo.id} className={cn('px-2 py-2 text-center text-xs font-bold border border-border/30', DISC_TEXT[cor])}>
                           {avg !== null ? avg.toFixed(1) : '—'}
                         </td>
                       );
                     })}
-                    <td className={cn('px-3 py-2 text-center text-sm font-bold', DISC_BG[cor], 'text-white rounded-bl-none')}>
+                    <td className={cn('px-3 py-2 text-center text-sm font-bold', DISC_BG[cor], 'text-white')}>
                       {(() => {
                         const medias = alunosNotas.map(a => a.media).filter(m => m !== null) as number[];
                         return medias.length ? (medias.reduce((a, b) => a + b, 0) / medias.length).toFixed(2) : '—';
