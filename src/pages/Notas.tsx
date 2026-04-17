@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, KeyboardEvent, ClipboardEvent } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Plus, Trash2, Download, AlertCircle, FileSpreadsheet, Pencil, ChevronLeft, ChevronRight, Check, Clipboard, Info } from 'lucide-react';
+import { Plus, Trash2, Download, AlertCircle, FileSpreadsheet, Pencil, ChevronLeft, ChevronRight, Check, Clipboard, Info, Eye } from 'lucide-react';
 import { PageHeader, FilterBar, BadgeSituacao, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getDisciplinaDot } from '@/pages/Materias';
+import { usePermissions } from '@/hooks/use-permissions';
 
 interface TipoAvaliacao {
   id: string;
@@ -214,6 +215,7 @@ export default function Notas() {
   const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
   const [pasteCount, setPasteCount] = useState(0);
   const { toast } = useToast();
+  const { userId, canEdit, readOnly } = usePermissions();
 
   const cellRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const tiposRef = useRef(tiposAvaliacao);
@@ -288,18 +290,19 @@ export default function Notas() {
   }
 
   const persistNota = useCallback(async (alunoId: string, tipoId: string, nota: number | null) => {
+    if (!canEdit || !userId) return;
     const key = `${alunoId}-${tipoId}`;
     setSaving(s => ({ ...s, [key]: true }));
     if (nota === null) {
       await supabase.from('notas').delete().eq('aluno_id', alunoId).eq('tipo_avaliacao_id', tipoId);
     } else {
-      await supabase.from('notas').upsert(
-        { aluno_id: alunoId, tipo_avaliacao_id: tipoId, nota, bimestre: parseInt(filterBimestre) },
+      await (supabase as any).from('notas').upsert(
+        { aluno_id: alunoId, tipo_avaliacao_id: tipoId, nota, bimestre: parseInt(filterBimestre), user_id: userId },
         { onConflict: 'aluno_id,tipo_avaliacao_id' }
       );
     }
     setSaving(s => ({ ...s, [key]: false }));
-  }, [filterBimestre]);
+  }, [filterBimestre, canEdit, userId]);
 
   const handleCellChange = useCallback((rowIdx: number, colIdx: number, rawValue: string) => {
     const nota = parseNota(rawValue);
@@ -418,10 +421,11 @@ export default function Notas() {
   }, [persistNota, toast]);
 
   async function adicionarTipoAvaliacao() {
-    if (!formTipo.nome) return;
-    await supabase.from('tipos_avaliacao').insert({
+    if (!formTipo.nome || !canEdit || !userId) return;
+    await (supabase as any).from('tipos_avaliacao').insert({
       nome: formTipo.nome, peso: formTipo.peso, bimestre: parseInt(filterBimestre),
-      disciplina_id: filterDisciplina, turma_id: filterTurma, ordem: tiposAvaliacao.length + 1
+      disciplina_id: filterDisciplina, turma_id: filterTurma, ordem: tiposAvaliacao.length + 1,
+      user_id: userId,
     });
     setDialogTipo(false);
     setFormTipo({ nome: '', peso: 1.0 });
@@ -501,11 +505,12 @@ export default function Notas() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Lançamento de Notas" subtitle="Planilha de notas — use Tab, Enter, setas e cole notas do Excel">
+      <PageHeader title="Lançamento de Notas" subtitle={readOnly ? 'Modo gestão — visualizando notas dos professores' : 'Planilha de notas — use Tab, Enter, setas e cole notas do Excel'}>
         <div className="flex items-center gap-2">
+          {readOnly && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"><Eye className="w-3 h-3" /> Somente leitura</span>}
           <Button variant="outline" size="sm" onClick={exportarCSV}><Download className="w-4 h-4 mr-1.5" />CSV</Button>
           <Button variant="outline" size="sm" onClick={exportarExcel}><FileSpreadsheet className="w-4 h-4 mr-1.5" />Excel</Button>
-          <Button size="sm" onClick={() => setDialogTipo(true)}><Plus className="w-4 h-4 mr-1.5" />Nova Avaliação</Button>
+          {canEdit && <Button size="sm" onClick={() => setDialogTipo(true)}><Plus className="w-4 h-4 mr-1.5" />Nova Avaliação</Button>}
         </div>
       </PageHeader>
 
