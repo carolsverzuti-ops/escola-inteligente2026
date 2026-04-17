@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   Plus, Edit2, Trash2, Copy, Search, BookOpen, Beaker, CheckCircle, Clock,
-  FolderOpen, Folder, ChevronRight, ChevronDown, FileText, AlertTriangle, PenLine
+  FolderOpen, Folder, ChevronRight, ChevronDown, FileText, AlertTriangle, PenLine, Eye
 } from 'lucide-react';
 import { PageHeader, FilterBar, EmptyState, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getDisciplinaDot } from '@/pages/Materias';
+import { usePermissions } from '@/hooks/use-permissions';
+import { useAuth } from '@/contexts/AuthContext';
 
 const DIAS_SEMANA = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
 
@@ -102,6 +104,8 @@ export default function PlanoAula() {
   const [ajusteTexto, setAjusteTexto] = useState('');
   const [savingAjuste, setSavingAjuste] = useState(false);
   const { toast } = useToast();
+  const { userId, canEdit, canApprove, readOnly } = usePermissions();
+  const { profile } = useAuth();
 
   useEffect(() => { loadData(); }, []);
 
@@ -152,21 +156,23 @@ export default function PlanoAula() {
   }
 
   async function duplicar(p: PlanoAula) {
-    const { id, created_at, updated_at, turmas: t, disciplinas: d, status, aprovado_por, data_aprovacao, comentario_aprovacao, ...rest } = p as any;
-    await db.from('planos_aula').insert({ ...rest, data_aula: new Date().toISOString().split('T')[0], duplicado_de: p.id, status: 'pendente' });
+    if (!canEdit || !userId) return;
+    const { id, created_at, updated_at, turmas: t, disciplinas: d, status, aprovado_por, data_aprovacao, comentario_aprovacao, user_id: _u, ...rest } = p as any;
+    await db.from('planos_aula').insert({ ...rest, data_aula: new Date().toISOString().split('T')[0], duplicado_de: p.id, status: 'pendente', user_id: userId });
     toast({ title: 'Plano duplicado!' });
     loadData();
   }
 
   async function save() {
     if (!form.turma_id || !form.data_aula) return toast({ title: 'Preencha turma e data', variant: 'destructive' });
+    if (!canEdit || !userId) return;
     setSaving(true);
     const payload = { ...form, disciplina_id: form.disciplina_id || null };
     if (editingPlano) {
       await db.from('planos_aula').update(payload).eq('id', editingPlano.id);
       toast({ title: 'Plano atualizado!' });
     } else {
-      await db.from('planos_aula').insert(payload);
+      await db.from('planos_aula').insert({ ...payload, user_id: userId });
       toast({ title: 'Plano cadastrado!' });
     }
     setSaving(false);
@@ -175,14 +181,17 @@ export default function PlanoAula() {
   }
 
   async function remove(id: string) {
+    if (!canEdit) return;
     if (!confirm('Excluir este plano de aula?')) return;
     await supabase.from('planos_aula').delete().eq('id', id);
     loadData();
   }
 
   async function aprovarPlano(plano: PlanoAula) {
+    if (!canApprove) return;
+    const aprovador = profile?.nome || profile?.email || 'Coordenação';
     await db.from('planos_aula').update({
-      status: 'aprovado', aprovado_por: 'Coordenação',
+      status: 'aprovado', aprovado_por: aprovador,
       data_aprovacao: new Date().toISOString(), comentario_aprovacao: approvalComment || null,
     }).eq('id', plano.id);
     toast({ title: '✅ Plano aprovado!' });
@@ -192,7 +201,7 @@ export default function PlanoAula() {
   }
 
   async function salvarAjuste() {
-    if (!ajusteDialog || !ajusteTexto.trim()) return;
+    if (!ajusteDialog || !ajusteTexto.trim() || !canEdit) return;
     setSavingAjuste(true);
     await db.from('ajustes_plano').insert({ plano_id: ajusteDialog.id, descricao: ajusteTexto.trim() });
     toast({ title: '📝 Ajuste registrado!' });
@@ -254,8 +263,9 @@ export default function PlanoAula() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Plano de Aula" subtitle="Planejamento organizado por bimestre e mês">
-        <Button size="sm" onClick={openNew}><Plus className="w-4 h-4 mr-1.5" />Novo Plano</Button>
+      <PageHeader title="Plano de Aula" subtitle={readOnly ? 'Modo gestão — visualizar e aprovar planos dos professores' : 'Planejamento organizado por bimestre e mês'}>
+        {readOnly && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"><Eye className="w-3 h-3" /> Somente leitura · Pode aprovar</span>}
+        {canEdit && <Button size="sm" onClick={openNew}><Plus className="w-4 h-4 mr-1.5" />Novo Plano</Button>}
       </PageHeader>
 
       {/* Tabs tipo de plano */}

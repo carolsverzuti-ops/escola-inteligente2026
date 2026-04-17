@@ -633,9 +633,9 @@ export default function Notas() {
                             value={aluno.notas[tipo.id] ?? null}
                             isFocused={focusCell?.row === rowIdx && focusCell?.col === colIdx}
                             onFocus={() => setFocusCell({ row: rowIdx, col: colIdx })}
-                            onChange={(val) => handleCellChange(rowIdx, colIdx, val)}
+                            onChange={(val) => canEdit && handleCellChange(rowIdx, colIdx, val)}
                             onKeyDown={(e) => handleCellKeyDown(e, rowIdx, colIdx)}
-                            onPaste={(e) => handlePaste(e, rowIdx, colIdx)}
+                            onPaste={(e) => canEdit && handlePaste(e, rowIdx, colIdx)}
                             inputRef={setCellRef(rowIdx, colIdx)}
                             saving={!!saving[savingKey]}
                           />
