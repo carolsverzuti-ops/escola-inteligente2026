@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Palette, Plus, Edit2, Trash2, BookOpen, BarChart3, ClipboardList, FileText } from 'lucide-react';
+import { Palette, Plus, Edit2, Trash2, BookOpen, BarChart3, ClipboardList, FileText, Eye } from 'lucide-react';
 import { PageHeader, TableContainer } from '@/components/ui-escola';
+import { usePermissions } from '@/hooks/use-permissions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -44,6 +45,7 @@ export default function Materias() {
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ nome: '', cor: 'azul' });
   const { toast } = useToast();
+  const { userId, canEdit, readOnly } = usePermissions();
 
   useEffect(() => { load(); }, []);
 
@@ -53,12 +55,12 @@ export default function Materias() {
   }
 
   async function save() {
-    if (!form.nome.trim()) return;
+    if (!form.nome.trim() || !canEdit || !userId) return;
     if (editing) {
       await supabase.from('disciplinas').update({ nome: form.nome, cor: form.cor }).eq('id', editing.id);
       toast({ title: 'Matéria atualizada!' });
     } else {
-      await supabase.from('disciplinas').insert({ nome: form.nome, cor: form.cor });
+      await supabase.from('disciplinas').insert({ nome: form.nome, cor: form.cor, user_id: userId });
       toast({ title: 'Matéria criada!' });
     }
     setDialogOpen(false);
@@ -66,6 +68,7 @@ export default function Materias() {
   }
 
   async function remove(id: string) {
+    if (!canEdit) return;
     if (!confirm('Excluir esta matéria? Isso pode afetar planos e notas vinculados.')) return;
     await supabase.from('disciplinas').delete().eq('id', id);
     toast({ title: 'Matéria excluída' });
@@ -77,10 +80,13 @@ export default function Materias() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Matérias" subtitle="Crie e gerencie suas matérias. As cores são usadas em todo o sistema.">
-        <Button size="sm" onClick={() => { setEditing(null); setForm({ nome: '', cor: 'azul' }); setDialogOpen(true); }}>
-          <Plus className="w-4 h-4 mr-1.5" />Nova Matéria
-        </Button>
+      <PageHeader title="Matérias" subtitle={readOnly ? 'Modo gestão — visualizando matérias de todos os professores' : 'Crie e gerencie suas matérias. As cores são usadas em todo o sistema.'}>
+        {readOnly && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"><Eye className="w-3 h-3" /> Somente leitura</span>}
+        {canEdit && (
+          <Button size="sm" onClick={() => { setEditing(null); setForm({ nome: '', cor: 'azul' }); setDialogOpen(true); }}>
+            <Plus className="w-4 h-4 mr-1.5" />Nova Matéria
+          </Button>
+        )}
       </PageHeader>
 
       {/* Stats */}
@@ -142,20 +148,22 @@ export default function Materias() {
                   <span className={cn('w-5 h-5 rounded-full shadow-sm', getDisciplinaDot(d.cor))} />
                   <h3 className="font-semibold text-foreground">{d.nome}</h3>
                 </div>
-                <div className="flex items-center gap-0.5">
-                  <button
-                    onClick={() => { setEditing(d); setForm({ nome: d.nome, cor: d.cor || 'azul' }); setDialogOpen(true); }}
-                    className="p-1.5 rounded-lg hover:bg-background/60 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => remove(d.id)}
-                    className="p-1.5 rounded-lg hover:bg-background/60 text-muted-foreground hover:text-destructive transition-colors"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                {canEdit && (
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => { setEditing(d); setForm({ nome: d.nome, cor: d.cor || 'azul' }); setDialogOpen(true); }}
+                      className="p-1.5 rounded-lg hover:bg-background/60 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => remove(d.id)}
+                      className="p-1.5 rounded-lg hover:bg-background/60 text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex flex-wrap gap-1.5">
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-background/60 text-muted-foreground">Plano de Aula</span>

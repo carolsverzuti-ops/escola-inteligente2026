@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, QrCode, ScanLine, Download, Printer, FileText } from 'lucide-react';
+import { Plus, QrCode, ScanLine, Download, Printer, FileText, Eye } from 'lucide-react';
 import { PageHeader, LoadingSpinner } from '@/components/ui-escola';
+import { usePermissions } from '@/hooks/use-permissions';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
@@ -35,6 +36,7 @@ export default function CorrecaoProvas() {
   const [anuladas, setAnuladas] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
+  const { userId, canEdit, readOnly } = usePermissions();
 
   useEffect(() => { loadData(); }, []);
   useEffect(() => { if (selectedProva) loadProvaDetails(); }, [selectedProva]);
@@ -72,7 +74,7 @@ export default function CorrecaoProvas() {
   }
 
   async function salvarGabarito() {
-    if (!selectedProva) return;
+    if (!selectedProva || !canEdit) return;
     const questoes = Array.from({ length: selectedProva.numero_questoes }, (_, i) => i + 1);
     const upserts = questoes.map(q => ({
       prova_id: selectedProva.id,
@@ -81,13 +83,14 @@ export default function CorrecaoProvas() {
       anulada: anuladas.includes(q),
       peso: 1.0,
     }));
-    const { error } = await supabase.from('gabaritos').upsert(upserts, { onConflict: 'prova_id,numero_questao' });
+    const { error } = await (supabase as any).from('gabaritos').upsert(upserts, { onConflict: 'prova_id,numero_questao' });
     if (error) { toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' }); return; }
     toast({ title: 'Gabarito salvo com sucesso!' });
     loadProvaDetails();
   }
 
   async function criarProva() {
+    if (!canEdit || !userId) return;
     setSaving(true);
     const { data, error } = await supabase.from('provas').insert({
       turma_id: formProva.turma_id || null,
@@ -97,6 +100,7 @@ export default function CorrecaoProvas() {
       numero_questoes: formProva.numero_questoes,
       data_aplicacao: formProva.data_aplicacao || null,
       observacoes: formProva.observacoes || null,
+      user_id: userId,
     }).select().single();
     setSaving(false);
     setDialogProva(false);
@@ -110,8 +114,9 @@ export default function CorrecaoProvas() {
   }
 
   async function salvarResultadoEscaneamento(alunoId: string, respostasAluno: Record<number, string>, nota: number, acertos: number) {
-    const { error } = await supabase.from('resultados_prova').upsert(
-      { prova_id: selectedProva.id, aluno_id: alunoId, respostas: respostasAluno, acertos, nota },
+    if (!canEdit || !userId) return;
+    const { error } = await (supabase as any).from('resultados_prova').upsert(
+      { prova_id: selectedProva.id, aluno_id: alunoId, respostas: respostasAluno, acertos, nota, user_id: userId },
       { onConflict: 'prova_id,aluno_id' }
     );
     if (error) { toast({ title: 'Erro ao salvar resultado', description: error.message, variant: 'destructive' }); return; }
@@ -147,15 +152,20 @@ export default function CorrecaoProvas() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Correção de Provas" subtitle="Sistema de correção automática por QR Code">
-        {selectedProva && (
+      <PageHeader title="Correção de Provas" subtitle={readOnly ? 'Modo gestão — visualização' : 'Sistema de correção automática por QR Code'}>
+        {readOnly && (
+          <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"><Eye className="w-3 h-3" /> Somente leitura</span>
+        )}
+        {!readOnly && selectedProva && (
           <Button size="sm" variant="outline" onClick={() => setDialogScan(true)} className="gap-1.5">
             <ScanLine className="w-4 h-4" />Escanear Folha
           </Button>
         )}
-        <Button size="sm" onClick={() => setDialogProva(true)} className="gap-1.5">
-          <Plus className="w-4 h-4" />Nova Prova
-        </Button>
+        {!readOnly && (
+          <Button size="sm" onClick={() => setDialogProva(true)} className="gap-1.5">
+            <Plus className="w-4 h-4" />Nova Prova
+          </Button>
+        )}
       </PageHeader>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
