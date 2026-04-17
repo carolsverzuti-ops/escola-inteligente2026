@@ -84,10 +84,26 @@ export default function Alunos() {
   }
 
   function downloadModelo() {
-    const csv = 'Nome Completo,Número Chamada,Série,Status\nAna Silva,1,7º Ano,Ativo';
+    const csv = 'Numero Chamada,Nome do Aluno,Serie/Turma\n1,Ana Silva,7°A\n2,Bruno Souza,7°A\n3,Carla Lima,8°B';
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'modelo_importacao_alunos.csv'; a.click();
+  }
+
+  // Normaliza formato de série/turma: aceita "7A", "7º A", "7°A", "7 A" → "7°A"
+  function normalizarSerieTurma(raw: string): string | null {
+    if (!raw) return null;
+    const limpo = raw.trim().toUpperCase().replace(/[ºO]/g, '°').replace(/\s+/g, '');
+    const match = limpo.match(/^(\d{1,2})°?([A-Z])$/);
+    if (!match) return null;
+    return `${match[1]}°${match[2]}`;
+  }
+
+  function inferirSerie(serieTurma: string): string {
+    const num = parseInt(serieTurma);
+    if (num >= 6 && num <= 9) return `${num}º Ano`;
+    if (num >= 1 && num <= 3) return `${num}ª Série EM`;
+    return serieTurma;
   }
 
   function exportarAlunos() {
@@ -105,24 +121,74 @@ export default function Alunos() {
     if (!file) return;
     const text = await file.text();
     const lines = text.trim().split('\n').slice(1);
+
+    // Carrega snapshot atual de turmas e alunos para evitar duplicação
+    const { data: turmasAtuais } = await supabase.from('turmas').select('id, nome, serie');
+    const { data: alunosAtuais } = await supabase.from('alunos').select('nome, turma_id');
+    const mapaTurmas = new Map<string, { id: string; serie: string }>();
+    (turmasAtuais || []).forEach(t => mapaTurmas.set(t.nome.toUpperCase().replace(/\s+/g, ''), { id: t.id, serie: t.serie }));
+
+    const erros: string[] = [];
+    const turmasCriadas: string[] = [];
     const inserts: any[] = [];
-    for (const line of lines) {
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       const cols = line.split(',').map(c => c.replace(/"/g, '').trim());
-      if (!cols[0]) continue;
-      const turma = turmas.find(t => t.nome.toLowerCase() === (cols[2] || '').toLowerCase() || t.serie.toLowerCase() === (cols[2] || '').toLowerCase());
+      if (!cols[0] && !cols[1]) continue;
+
+      const numero = parseInt(cols[0]) || 0;
+      const nome = cols[1];
+      const serieTurmaRaw = cols[2];
+
+      if (!nome) { erros.push(`Linha ${i + 2}: nome vazio`); continue; }
+      const serieTurma = normalizarSerieTurma(serieTurmaRaw);
+      if (!serieTurma) { erros.push(`Linha ${i + 2}: formato de turma inválido "${serieTurmaRaw}" (use ex: 7°A)`); continue; }
+
+      // Verifica/cria turma
+      let turmaInfo = mapaTurmas.get(serieTurma.toUpperCase().replace(/\s+/g, ''));
+      if (!turmaInfo) {
+        const novaSerie = inferirSerie(serieTurma);
+        const { data: novaTurma, error: errTurma } = await supabase
+          .from('turmas')
+          .insert({ nome: serieTurma, serie: novaSerie, turno: 'Manhã' })
+          .select('id, nome, serie')
+          .single();
+        if (errTurma || !novaTurma) { erros.push(`Linha ${i + 2}: falha ao criar turma ${serieTurma}`); continue; }
+        turmaInfo = { id: novaTurma.id, serie: novaTurma.serie };
+        mapaTurmas.set(serieTurma.toUpperCase().replace(/\s+/g, ''), turmaInfo);
+        turmasCriadas.push(serieTurma);
+      }
+
+      // Evita duplicação (mesmo nome na mesma turma)
+      const duplicado = (alunosAtuais || []).some(
+        a => a.turma_id === turmaInfo!.id && a.nome.trim().toLowerCase() === nome.toLowerCase()
+      ) || inserts.some(x => x.turma_id === turmaInfo!.id && x.nome.toLowerCase() === nome.toLowerCase());
+      if (duplicado) { erros.push(`Linha ${i + 2}: aluno "${nome}" já existe em ${serieTurma}`); continue; }
+
       inserts.push({
-        nome: cols[0],
-        numero_chamada: parseInt(cols[1]) || 0,
-        serie: cols[2] || '',
-        turma_id: turma?.id || null,
-        ativo: (cols[3] || 'Ativo').toLowerCase() !== 'inativo',
+        nome,
+        numero_chamada: numero,
+        serie: turmaInfo.serie,
+        turma_id: turmaInfo.id,
+        ativo: true,
       });
     }
+
     if (inserts.length > 0) {
-      await supabase.from('alunos').insert(inserts);
-      toast({ title: `${inserts.length} alunos importados!` });
+      const { error } = await supabase.from('alunos').insert(inserts);
+      if (error) {
+        toast({ title: 'Erro ao importar', description: error.message, variant: 'destructive' });
+      } else {
+        const turmasMsg = turmasCriadas.length ? ` | Turmas criadas: ${turmasCriadas.join(', ')}` : '';
+        const errosMsg = erros.length ? ` | ${erros.length} linha(s) ignorada(s)` : '';
+        toast({ title: `${inserts.length} alunos importados!`, description: turmasMsg + errosMsg });
+      }
       loadData();
+    } else {
+      toast({ title: 'Nenhum aluno importado', description: erros.slice(0, 3).join(' • '), variant: 'destructive' });
     }
+    if (erros.length > 0) console.warn('Erros na importação:', erros);
     if (fileRef.current) fileRef.current.value = '';
   }
 
