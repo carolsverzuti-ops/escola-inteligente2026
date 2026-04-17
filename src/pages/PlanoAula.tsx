@@ -403,26 +403,34 @@ export default function PlanoAula() {
                                       <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-success/15 text-success flex-shrink-0">
                                         <CheckCircle className="w-3 h-3" /> OK
                                       </span>
-                                    ) : (
+                                    ) : canApprove ? (
                                       <button onClick={e => { e.stopPropagation(); setApprovalDialog(plano); }}
                                         className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-warning/15 text-warning hover:bg-warning/25 transition-colors flex-shrink-0">
-                                        <Clock className="w-3 h-3" /> Pendente
+                                        <Clock className="w-3 h-3" /> Aprovar
                                       </button>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-warning/15 text-warning flex-shrink-0">
+                                        <Clock className="w-3 h-3" /> Pendente
+                                      </span>
                                     )}
 
                                     <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
-                                      <button className="p-1 rounded hover:bg-secondary" onClick={() => setAjusteDialog(plano)} title="Registrar ajuste">
-                                        <PenLine className="w-3.5 h-3.5 text-muted-foreground hover:text-warning" />
-                                      </button>
-                                      <button className="p-1 rounded hover:bg-secondary" onClick={() => openEdit(plano)} title="Editar">
-                                        <Edit2 className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
-                                      </button>
-                                      <button className="p-1 rounded hover:bg-secondary" onClick={() => duplicar(plano)} title="Duplicar">
-                                        <Copy className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
-                                      </button>
-                                      <button className="p-1 rounded hover:bg-destructive/10" onClick={() => remove(plano.id)} title="Excluir">
-                                        <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
-                                      </button>
+                                      {canEdit && (
+                                        <>
+                                          <button className="p-1 rounded hover:bg-secondary" onClick={() => setAjusteDialog(plano)} title="Registrar ajuste">
+                                            <PenLine className="w-3.5 h-3.5 text-muted-foreground hover:text-warning" />
+                                          </button>
+                                          <button className="p-1 rounded hover:bg-secondary" onClick={() => openEdit(plano)} title="Editar">
+                                            <Edit2 className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                                          </button>
+                                          <button className="p-1 rounded hover:bg-secondary" onClick={() => duplicar(plano)} title="Duplicar">
+                                            <Copy className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                                          </button>
+                                          <button className="p-1 rounded hover:bg-destructive/10" onClick={() => remove(plano.id)} title="Excluir">
+                                            <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive" />
+                                          </button>
+                                        </>
+                                      )}
                                     </div>
 
                                     <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform flex-shrink-0', isExpanded && 'rotate-180')} />
