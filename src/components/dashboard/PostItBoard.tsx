@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Plus, X, Pin, PinOff, Check, Clock, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { usePermissions } from '@/hooks/use-permissions';
 
 // ── tipos ──────────────────────────────────────────────────────────
 interface Lembrete {
@@ -57,6 +58,7 @@ function NovoForm({ turmas, disciplinas, onSave, onClose }: {
   turmas: Turma[]; disciplinas: Disciplina[]; onSave: () => void; onClose: () => void;
 }) {
   const { toast } = useToast();
+  const { userId } = usePermissions();
   const [titulo, setTitulo]         = useState('');
   const [descricao, setDescricao]   = useState('');
   const [data, setData]             = useState('');
@@ -71,10 +73,12 @@ function NovoForm({ turmas, disciplinas, onSave, onClose }: {
 
   const save = async () => {
     if (!titulo.trim()) { toast({ title: 'Título obrigatório', variant: 'destructive' }); return; }
+    if (!userId) { toast({ title: 'Você precisa estar logado', variant: 'destructive' }); return; }
     setSaving(true);
     const { error } = await db.from('lembretes').insert({
       titulo: titulo.trim(), descricao: descricao || null, data: data || null,
       prioridade, cor, turma_id: turmaId || null, disciplina_id: discId || null,
+      user_id: userId,
     });
     setSaving(false);
     if (error) { toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' }); return; }

@@ -107,6 +107,7 @@ export type Database = {
           id: string
           nome: string
           professor: string | null
+          user_id: string
         }
         Insert: {
           carga_horaria?: number | null
@@ -115,6 +116,7 @@ export type Database = {
           id?: string
           nome: string
           professor?: string | null
+          user_id: string
         }
         Update: {
           carga_horaria?: number | null
@@ -123,6 +125,7 @@ export type Database = {
           id?: string
           nome?: string
           professor?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -176,6 +179,7 @@ export type Database = {
           titulo: string
           turma_id: string | null
           updated_at: string
+          user_id: string
         }
         Insert: {
           concluido?: boolean
@@ -191,6 +195,7 @@ export type Database = {
           titulo: string
           turma_id?: string | null
           updated_at?: string
+          user_id: string
         }
         Update: {
           concluido?: boolean
@@ -206,6 +211,7 @@ export type Database = {
           titulo?: string
           turma_id?: string | null
           updated_at?: string
+          user_id?: string
         }
         Relationships: [
           {
@@ -234,6 +240,7 @@ export type Database = {
           observacoes: string | null
           tipo_avaliacao_id: string | null
           updated_at: string | null
+          user_id: string
         }
         Insert: {
           aluno_id?: string | null
@@ -244,6 +251,7 @@ export type Database = {
           observacoes?: string | null
           tipo_avaliacao_id?: string | null
           updated_at?: string | null
+          user_id: string
         }
         Update: {
           aluno_id?: string | null
@@ -254,6 +262,7 @@ export type Database = {
           observacoes?: string | null
           tipo_avaliacao_id?: string | null
           updated_at?: string | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -319,6 +328,7 @@ export type Database = {
           solucao_adotada: string | null
           turma_id: string | null
           updated_at: string | null
+          user_id: string
         }
         Insert: {
           alunos_envolvidos?: string | null
@@ -334,6 +344,7 @@ export type Database = {
           solucao_adotada?: string | null
           turma_id?: string | null
           updated_at?: string | null
+          user_id: string
         }
         Update: {
           alunos_envolvidos?: string | null
@@ -349,6 +360,7 @@ export type Database = {
           solucao_adotada?: string | null
           turma_id?: string | null
           updated_at?: string | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -388,6 +400,7 @@ export type Database = {
           tipo: string
           turma_id: string | null
           updated_at: string | null
+          user_id: string
         }
         Insert: {
           aprendizagem_essencial?: string | null
@@ -416,6 +429,7 @@ export type Database = {
           tipo?: string
           turma_id?: string | null
           updated_at?: string | null
+          user_id: string
         }
         Update: {
           aprendizagem_essencial?: string | null
@@ -444,6 +458,7 @@ export type Database = {
           tipo?: string
           turma_id?: string | null
           updated_at?: string | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -506,6 +521,7 @@ export type Database = {
           professor: string | null
           titulo: string
           turma_id: string | null
+          user_id: string
           valor_total: number | null
         }
         Insert: {
@@ -520,6 +536,7 @@ export type Database = {
           professor?: string | null
           titulo: string
           turma_id?: string | null
+          user_id: string
           valor_total?: number | null
         }
         Update: {
@@ -534,6 +551,7 @@ export type Database = {
           professor?: string | null
           titulo?: string
           turma_id?: string | null
+          user_id?: string
           valor_total?: number | null
         }
         Relationships: [
@@ -564,6 +582,7 @@ export type Database = {
           observacoes: string | null
           prova_id: string | null
           respostas: Json | null
+          user_id: string
         }
         Insert: {
           acertos?: number | null
@@ -575,6 +594,7 @@ export type Database = {
           observacoes?: string | null
           prova_id?: string | null
           respostas?: Json | null
+          user_id: string
         }
         Update: {
           acertos?: number | null
@@ -586,6 +606,7 @@ export type Database = {
           observacoes?: string | null
           prova_id?: string | null
           respostas?: Json | null
+          user_id?: string
         }
         Relationships: [
           {
@@ -615,6 +636,7 @@ export type Database = {
           ordem: number | null
           peso: number | null
           turma_id: string | null
+          user_id: string
         }
         Insert: {
           bimestre?: number | null
@@ -626,6 +648,7 @@ export type Database = {
           ordem?: number | null
           peso?: number | null
           turma_id?: string | null
+          user_id: string
         }
         Update: {
           bimestre?: number | null
@@ -637,6 +660,7 @@ export type Database = {
           ordem?: number | null
           peso?: number | null
           turma_id?: string | null
+          user_id?: string
         }
         Relationships: [
           {
