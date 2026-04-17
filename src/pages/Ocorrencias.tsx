@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Plus, Edit2, Trash2, Search, Camera, Image as ImageIcon, X, ZoomIn, FileText, Download } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, Camera, Image as ImageIcon, X, ZoomIn, FileText, Download, Eye } from 'lucide-react';
 import { PageHeader, FilterBar, TableContainer, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { usePermissions } from '@/hooks/use-permissions';
 
 const SUPABASE_URL = "https://meozprygfkssbqrmnyhw.supabase.co";
 
@@ -54,6 +55,7 @@ export default function Ocorrencias() {
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const { userId, canEdit, readOnly } = usePermissions();
 
   useEffect(() => { loadData(); }, []);
 
@@ -120,9 +122,11 @@ export default function Ocorrencias() {
   }
 
   async function uploadPhotos(ocorrenciaId: string) {
+    if (!userId) return;
     for (const file of pendingFiles) {
       const ext = file.name.split('.').pop();
-      const path = `${ocorrenciaId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+      // Pasta começa pelo userId para casar com a policy de storage
+      const path = `${userId}/${ocorrenciaId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
       const { error } = await supabase.storage.from('ocorrencias-fotos').upload(path, file);
       if (error) { console.error('Upload error:', error); continue; }
       const url = `${SUPABASE_URL}/storage/v1/object/public/ocorrencias-fotos/${path}`;
@@ -131,6 +135,7 @@ export default function Ocorrencias() {
   }
 
   async function save() {
+    if (!canEdit || !userId) return;
     setSaving(true);
     const payload = { ...form, turma_id: form.turma_id || null };
     let ocId = editing?.id;
@@ -138,7 +143,7 @@ export default function Ocorrencias() {
       await supabase.from('ocorrencias_notebook').update(payload).eq('id', editing.id);
       toast({ title: 'Ocorrência atualizada!' });
     } else {
-      const { data } = await supabase.from('ocorrencias_notebook').insert(payload).select('id').single();
+      const { data } = await (supabase as any).from('ocorrencias_notebook').insert({ ...payload, user_id: userId }).select('id').single();
       ocId = data?.id;
       toast({ title: 'Ocorrência registrada!' });
     }
@@ -287,11 +292,12 @@ export default function Ocorrencias() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="Ocorrências de Notebook" subtitle={`${ocorrencias.length} ocorrências registradas`}>
+      <PageHeader title="Ocorrências de Notebook" subtitle={readOnly ? `${ocorrencias.length} ocorrências (modo gestão)` : `${ocorrencias.length} ocorrências registradas`}>
+        {readOnly && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"><Eye className="w-3 h-3" /> Somente leitura</span>}
         <Button size="sm" variant="outline" onClick={generatePdf} disabled={generatingPdf || filtered.length === 0}>
           <FileText className="w-4 h-4 mr-1.5" />{generatingPdf ? 'Gerando...' : 'Exportar PDF'}
         </Button>
-        <Button size="sm" onClick={openNew}><Plus className="w-4 h-4 mr-1.5" />Nova Ocorrência</Button>
+        {canEdit && <Button size="sm" onClick={openNew}><Plus className="w-4 h-4 mr-1.5" />Nova Ocorrência</Button>}
       </PageHeader>
 
       <FilterBar>
@@ -359,10 +365,12 @@ export default function Ocorrencias() {
                     </td>
                     <td className="text-xs text-muted-foreground max-w-[150px] truncate">{o.solucao_adotada || '—'}</td>
                     <td>
-                      <div className="flex items-center justify-center gap-1">
-                        <button onClick={() => openEdit(o)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"><Edit2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => remove(o.id)} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
-                      </div>
+                      {canEdit && (
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => openEdit(o)} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground"><Edit2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => remove(o.id)} className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
