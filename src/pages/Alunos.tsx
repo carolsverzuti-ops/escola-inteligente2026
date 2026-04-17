@@ -84,10 +84,26 @@ export default function Alunos() {
   }
 
   function downloadModelo() {
-    const csv = 'Nome Completo,Número Chamada,Série,Status\nAna Silva,1,7º Ano,Ativo';
+    const csv = 'Numero Chamada,Nome do Aluno,Serie/Turma\n1,Ana Silva,7°A\n2,Bruno Souza,7°A\n3,Carla Lima,8°B';
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'modelo_importacao_alunos.csv'; a.click();
+  }
+
+  // Normaliza formato de série/turma: aceita "7A", "7º A", "7°A", "7 A" → "7°A"
+  function normalizarSerieTurma(raw: string): string | null {
+    if (!raw) return null;
+    const limpo = raw.trim().toUpperCase().replace(/[ºO]/g, '°').replace(/\s+/g, '');
+    const match = limpo.match(/^(\d{1,2})°?([A-Z])$/);
+    if (!match) return null;
+    return `${match[1]}°${match[2]}`;
+  }
+
+  function inferirSerie(serieTurma: string): string {
+    const num = parseInt(serieTurma);
+    if (num >= 6 && num <= 9) return `${num}º Ano`;
+    if (num >= 1 && num <= 3) return `${num}ª Série EM`;
+    return serieTurma;
   }
 
   function exportarAlunos() {
