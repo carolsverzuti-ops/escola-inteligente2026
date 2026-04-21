@@ -105,6 +105,8 @@ export default function Cadastro() {
                 <SelectContent>
                   <SelectItem value="professor">Professor</SelectItem>
                   <SelectItem value="coordenador">Coordenador</SelectItem>
+                  <SelectItem value="vice_direcao">Vice-direção</SelectItem>
+                  <SelectItem value="direcao">Direção</SelectItem>
                 </SelectContent>
               </Select>
             </div>
