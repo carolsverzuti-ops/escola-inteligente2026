@@ -7,18 +7,19 @@ import {
 } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 
-// ── Paleta semântica ───────────────────────────────────────────────
-const C_PRIMARY    = 'hsl(214 90% 38%)';
-const C_GLOW       = 'hsl(214 80% 55%)';
-const C_SUCCESS    = 'hsl(142 72% 29%)';
-const C_WARNING    = 'hsl(38 92% 48%)';
-const C_DANGER     = 'hsl(0 84% 55%)';
-const C_MUTED      = 'hsl(215 15% 50%)';
+// ── Paleta semântica suave (terracota / sálvia / rosé) ─────────────
+const C_PRIMARY    = 'hsl(22 35% 45%)';   // terracota
+const C_GLOW       = 'hsl(18 50% 62%)';   // terracota clara
+const C_SUCCESS    = 'hsl(134 28% 52%)';  // verde sálvia
+const C_WARNING    = 'hsl(38 65% 60%)';   // mostarda suave
+const C_DANGER     = 'hsl(0 55% 68%)';    // vermelho suave
+const C_ROSE       = 'hsl(4 50% 75%)';    // rosé
+const C_MUTED      = 'hsl(25 12% 60%)';
+const C_GRID       = 'hsl(30 18% 88%)';
 
 const PIE_COLORS = [C_SUCCESS, C_WARNING, C_DANGER];
-const BAR_COLORS = [C_PRIMARY, C_GLOW, 'hsl(214 70% 65%)', 'hsl(214 60% 72%)', 'hsl(214 50% 78%)'];
-
-const DIST_COLORS = [C_DANGER, 'hsl(15 90% 55%)', C_WARNING, C_GLOW, C_SUCCESS];
+const BAR_COLORS = [C_PRIMARY, C_GLOW, C_ROSE, 'hsl(34 30% 70%)', 'hsl(28 25% 78%)'];
+const DIST_COLORS = [C_DANGER, C_ROSE, C_WARNING, C_GLOW, C_SUCCESS];
 
 // ── Tipos ──────────────────────────────────────────────────────────
 export interface SituacaoData { name: string; value: number }
@@ -49,7 +50,7 @@ export function GraficoBarraTurma({ data }: { data: MediaTurmaData[] }) {
   return (
     <ChartContainer config={{ media: { label: 'Média', color: C_PRIMARY } }} className="h-[220px] w-full">
       <BarChart data={data} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(214 20% 88%)" />
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={C_GRID} />
         <XAxis dataKey="turma" tick={{ fontSize: 11 }} />
         <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} />
         <ChartTooltip content={<ChartTooltipContent />} />
@@ -65,7 +66,7 @@ export function GraficoEvolucao({ data, keys }: { data: EvolucaoData[]; keys: st
   return (
     <ChartContainer config={Object.fromEntries(keys.map((k, i) => [k, { label: k, color: colors[i % colors.length] }]))} className="h-[220px] w-full">
       <LineChart data={data} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(214 20% 88%)" />
+        <CartesianGrid strokeDasharray="3 3" stroke={C_GRID} />
         <XAxis dataKey="label" tick={{ fontSize: 11 }} />
         <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} />
         <ChartTooltip content={<ChartTooltipContent />} />
@@ -83,7 +84,7 @@ export function GraficoTipoAvaliacao({ data }: { data: TipoAvalData[] }) {
   return (
     <ChartContainer config={{ media: { label: 'Média', color: C_GLOW } }} className="h-[220px] w-full">
       <BarChart data={data} layout="vertical" margin={{ top: 4, right: 24, left: 4, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(214 20% 88%)" />
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={C_GRID} />
         <XAxis type="number" domain={[0, 10]} tick={{ fontSize: 11 }} />
         <YAxis type="category" dataKey="nome" tick={{ fontSize: 11 }} width={90} />
         <ChartTooltip content={<ChartTooltipContent />} />
@@ -100,7 +101,7 @@ export function GraficoDistribuicao({ data }: { data: DistribuicaoData[] }) {
   return (
     <ChartContainer config={{ quantidade: { label: 'Alunos', color: C_PRIMARY } }} className="h-[220px] w-full">
       <BarChart data={data} margin={{ top: 4, right: 8, left: -18, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(214 20% 88%)" />
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={C_GRID} />
         <XAxis dataKey="faixa" tick={{ fontSize: 10 }} />
         <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
         <ChartTooltip content={<ChartTooltipContent />} />
@@ -121,7 +122,7 @@ export function GraficoAlunos({ data }: { data: AlunoDesempenhoData[] }) {
   return (
     <ChartContainer config={{ media: { label: 'Média', color: C_PRIMARY } }} className="h-[260px] w-full">
       <BarChart data={colored} layout="vertical" margin={{ top: 4, right: 28, left: 4, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="hsl(214 20% 88%)" />
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={C_GRID} />
         <XAxis type="number" domain={[0, 10]} tick={{ fontSize: 11 }} />
         <YAxis type="category" dataKey="nome" tick={{ fontSize: 10 }} width={110} />
         <ChartTooltip content={<ChartTooltipContent />} />
