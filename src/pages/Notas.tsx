@@ -241,18 +241,62 @@ export default function Notas() {
     }, 0);
   }, []);
 
-  useEffect(() => { loadFilters(); }, []);
-  useEffect(() => { if (filterTurma && filterDisciplina) loadNotas(); }, [filterTurma, filterDisciplina, filterBimestre]);
+  // Carrega apenas turmas onde o professor logado tem ao menos uma matéria vinculada
+  useEffect(() => { if (userId) loadTurmas(); }, [userId, readOnly]);
 
-  async function loadFilters() {
-    const [{ data: t }, { data: d }] = await Promise.all([
-      supabase.from('turmas').select('id, nome, serie').order('nome'),
-      supabase.from('disciplinas').select('id, nome, cor').order('nome'),
-    ]);
-    setTurmas(t || []);
-    setDisciplinas(d || []);
-    if (t?.length) setFilterTurma(t[0].id);
-    if (d?.length) setFilterDisciplina(d[0].id);
+  // Quando muda a turma, carrega APENAS as matérias vinculadas a essa turma para esse professor
+  useEffect(() => {
+    if (filterTurma && userId) loadDisciplinasDaTurma();
+    else { setDisciplinas([]); setFilterDisciplina(''); }
+  }, [filterTurma, userId, readOnly]);
+
+  useEffect(() => { if (filterTurma && filterDisciplina) loadNotas(); else setAlunosNotas([]); }, [filterTurma, filterDisciplina, filterBimestre]);
+
+  async function loadTurmas() {
+    if (readOnly) {
+      // Gestão vê todas as turmas
+      const { data: t } = await supabase.from('turmas').select('id, nome, serie').order('nome');
+      setTurmas(t || []);
+      if (t?.length && !filterTurma) setFilterTurma(t[0].id);
+      return;
+    }
+    // Professor: apenas turmas em que tem matéria vinculada
+    const { data: vinculos } = await supabase
+      .from('turma_disciplinas')
+      .select('turma_id, turmas:turma_id(id, nome, serie)')
+      .eq('user_id', userId!);
+    const turmasUnicas = new Map<string, any>();
+    (vinculos || []).forEach((v: any) => {
+      if (v.turmas) turmasUnicas.set(v.turmas.id, v.turmas);
+    });
+    const lista = Array.from(turmasUnicas.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+    setTurmas(lista);
+    if (lista.length && !filterTurma) setFilterTurma(lista[0].id);
+    else if (!lista.length) setFilterTurma('');
+  }
+
+  async function loadDisciplinasDaTurma() {
+    // Busca apenas as disciplinas vinculadas à turma selecionada para o professor logado
+    let query = supabase
+      .from('turma_disciplinas')
+      .select('disciplina_id, disciplinas:disciplina_id(id, nome, cor, user_id)')
+      .eq('turma_id', filterTurma);
+
+    // Professor: filtrar pelo seu user_id. Gestão: ver todos.
+    if (!readOnly) query = query.eq('user_id', userId!);
+
+    const { data } = await query;
+    const disciplinasUnicas = new Map<string, any>();
+    (data || []).forEach((v: any) => {
+      if (v.disciplinas) disciplinasUnicas.set(v.disciplinas.id, v.disciplinas);
+    });
+    const lista = Array.from(disciplinasUnicas.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+    setDisciplinas(lista);
+
+    // Auto-selecionar única disciplina, ou limpar se não estiver mais disponível
+    if (lista.length === 1) setFilterDisciplina(lista[0].id);
+    else if (lista.length === 0) setFilterDisciplina('');
+    else if (filterDisciplina && !lista.find(d => d.id === filterDisciplina)) setFilterDisciplina('');
   }
 
   async function loadNotas() {
