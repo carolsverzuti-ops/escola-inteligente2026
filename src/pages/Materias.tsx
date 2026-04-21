@@ -41,17 +41,69 @@ export function getDisciplinaBg(cor?: string) {
 
 export default function Materias() {
   const [disciplinas, setDisciplinas] = useState<any[]>([]);
+  const [turmas, setTurmas] = useState<any[]>([]);
+  const [vinculos, setVinculos] = useState<{ disciplina_id: string; turma_id: string }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ nome: '', cor: 'azul' });
+  const [vincDialogOpen, setVincDialogOpen] = useState(false);
+  const [vincDisciplina, setVincDisciplina] = useState<any>(null);
+  const [vincSelecionadas, setVincSelecionadas] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { userId, canEdit, readOnly } = usePermissions();
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [userId]);
 
   async function load() {
-    const { data } = await supabase.from('disciplinas').select('*').order('nome');
-    setDisciplinas(data || []);
+    const [{ data: disc }, { data: t }, vincRes] = await Promise.all([
+      supabase.from('disciplinas').select('*').order('nome'),
+      supabase.from('turmas').select('id, nome, serie').order('nome'),
+      userId
+        ? supabase.from('turma_disciplinas').select('disciplina_id, turma_id').eq('user_id', userId)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    setDisciplinas(disc || []);
+    setTurmas(t || []);
+    setVinculos(vincRes.data || []);
+  }
+
+  function abrirVinculos(d: any) {
+    setVincDisciplina(d);
+    const atuais = vinculos.filter(v => v.disciplina_id === d.id).map(v => v.turma_id);
+    setVincSelecionadas(new Set(atuais));
+    setVincDialogOpen(true);
+  }
+
+  function toggleVinc(turmaId: string) {
+    setVincSelecionadas(prev => {
+      const next = new Set(prev);
+      if (next.has(turmaId)) next.delete(turmaId);
+      else next.add(turmaId);
+      return next;
+    });
+  }
+
+  async function salvarVinculos() {
+    if (!vincDisciplina || !userId) return;
+    const atuais = new Set(vinculos.filter(v => v.disciplina_id === vincDisciplina.id).map(v => v.turma_id));
+    const novas = vincSelecionadas;
+    const adicionar = Array.from(novas).filter(id => !atuais.has(id));
+    const remover = Array.from(atuais).filter(id => !novas.has(id));
+
+    if (adicionar.length) {
+      await supabase.from('turma_disciplinas').insert(
+        adicionar.map(turma_id => ({ turma_id, disciplina_id: vincDisciplina.id, user_id: userId }))
+      );
+    }
+    if (remover.length) {
+      await supabase.from('turma_disciplinas').delete()
+        .eq('disciplina_id', vincDisciplina.id)
+        .eq('user_id', userId)
+        .in('turma_id', remover);
+    }
+    toast({ title: 'Vínculos atualizados!', description: `${vincDisciplina.nome} agora aparece apenas nas turmas selecionadas.` });
+    setVincDialogOpen(false);
+    load();
   }
 
   async function save() {
