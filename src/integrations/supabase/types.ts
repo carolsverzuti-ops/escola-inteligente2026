@@ -679,6 +679,45 @@ export type Database = {
           },
         ]
       }
+      turma_disciplinas: {
+        Row: {
+          created_at: string
+          disciplina_id: string
+          id: string
+          turma_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          disciplina_id: string
+          id?: string
+          turma_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          disciplina_id?: string
+          id?: string
+          turma_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "turma_disciplinas_disciplina_id_fkey"
+            columns: ["disciplina_id"]
+            isOneToOne: false
+            referencedRelation: "disciplinas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "turma_disciplinas_turma_id_fkey"
+            columns: ["turma_id"]
+            isOneToOne: false
+            referencedRelation: "turmas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       turmas: {
         Row: {
           ano_letivo: number

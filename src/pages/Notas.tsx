@@ -241,18 +241,62 @@ export default function Notas() {
     }, 0);
   }, []);
 
-  useEffect(() => { loadFilters(); }, []);
-  useEffect(() => { if (filterTurma && filterDisciplina) loadNotas(); }, [filterTurma, filterDisciplina, filterBimestre]);
+  // Carrega apenas turmas onde o professor logado tem ao menos uma matéria vinculada
+  useEffect(() => { if (userId) loadTurmas(); }, [userId, readOnly]);
 
-  async function loadFilters() {
-    const [{ data: t }, { data: d }] = await Promise.all([
-      supabase.from('turmas').select('id, nome, serie').order('nome'),
-      supabase.from('disciplinas').select('id, nome, cor').order('nome'),
-    ]);
-    setTurmas(t || []);
-    setDisciplinas(d || []);
-    if (t?.length) setFilterTurma(t[0].id);
-    if (d?.length) setFilterDisciplina(d[0].id);
+  // Quando muda a turma, carrega APENAS as matérias vinculadas a essa turma para esse professor
+  useEffect(() => {
+    if (filterTurma && userId) loadDisciplinasDaTurma();
+    else { setDisciplinas([]); setFilterDisciplina(''); }
+  }, [filterTurma, userId, readOnly]);
+
+  useEffect(() => { if (filterTurma && filterDisciplina) loadNotas(); else setAlunosNotas([]); }, [filterTurma, filterDisciplina, filterBimestre]);
+
+  async function loadTurmas() {
+    if (readOnly) {
+      // Gestão vê todas as turmas
+      const { data: t } = await supabase.from('turmas').select('id, nome, serie').order('nome');
+      setTurmas(t || []);
+      if (t?.length && !filterTurma) setFilterTurma(t[0].id);
+      return;
+    }
+    // Professor: apenas turmas em que tem matéria vinculada
+    const { data: vinculos } = await supabase
+      .from('turma_disciplinas')
+      .select('turma_id, turmas:turma_id(id, nome, serie)')
+      .eq('user_id', userId!);
+    const turmasUnicas = new Map<string, any>();
+    (vinculos || []).forEach((v: any) => {
+      if (v.turmas) turmasUnicas.set(v.turmas.id, v.turmas);
+    });
+    const lista = Array.from(turmasUnicas.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+    setTurmas(lista);
+    if (lista.length && !filterTurma) setFilterTurma(lista[0].id);
+    else if (!lista.length) setFilterTurma('');
+  }
+
+  async function loadDisciplinasDaTurma() {
+    // Busca apenas as disciplinas vinculadas à turma selecionada para o professor logado
+    let query = supabase
+      .from('turma_disciplinas')
+      .select('disciplina_id, disciplinas:disciplina_id(id, nome, cor, user_id)')
+      .eq('turma_id', filterTurma);
+
+    // Professor: filtrar pelo seu user_id. Gestão: ver todos.
+    if (!readOnly) query = query.eq('user_id', userId!);
+
+    const { data } = await query;
+    const disciplinasUnicas = new Map<string, any>();
+    (data || []).forEach((v: any) => {
+      if (v.disciplinas) disciplinasUnicas.set(v.disciplinas.id, v.disciplinas);
+    });
+    const lista = Array.from(disciplinasUnicas.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+    setDisciplinas(lista);
+
+    // Auto-selecionar única disciplina, ou limpar se não estiver mais disponível
+    if (lista.length === 1) setFilterDisciplina(lista[0].id);
+    else if (lista.length === 0) setFilterDisciplina('');
+    else if (filterDisciplina && !lista.find(d => d.id === filterDisciplina)) setFilterDisciplina('');
   }
 
   async function loadNotas() {
@@ -517,12 +561,18 @@ export default function Notas() {
       <FilterBar>
         <Select value={filterTurma} onValueChange={setFilterTurma}>
           <SelectTrigger className="w-36 h-8 text-sm bg-background"><SelectValue placeholder="Turma" /></SelectTrigger>
-          <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
+          <SelectContent>
+            {turmas.length === 0 ? (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">Nenhuma turma vinculada</div>
+            ) : turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
+          </SelectContent>
         </Select>
-        <Select value={filterDisciplina} onValueChange={setFilterDisciplina}>
+        <Select value={filterDisciplina} onValueChange={setFilterDisciplina} disabled={!filterTurma || disciplinas.length === 0}>
           <SelectTrigger className="w-48 h-8 text-sm bg-background"><SelectValue placeholder="Disciplina" /></SelectTrigger>
           <SelectContent>
-            {disciplinas.map(d => (
+            {disciplinas.length === 0 ? (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">Nenhuma matéria vinculada a esta turma</div>
+            ) : disciplinas.map(d => (
               <SelectItem key={d.id} value={d.id}>
                 <span className="flex items-center gap-2">
                   <span className={cn('w-2.5 h-2.5 rounded-full', getDisciplinaDot(d.cor))} />
@@ -583,7 +633,19 @@ export default function Notas() {
       {!filterTurma || !filterDisciplina ? (
         <div className="flex flex-col items-center justify-center py-20 text-center bg-card border border-border rounded-xl">
           <AlertCircle className="w-10 h-10 text-muted-foreground/30 mb-2" />
-          <p className="text-muted-foreground">Selecione a turma e a disciplina para visualizar as notas</p>
+          {turmas.length === 0 ? (
+            <>
+              <p className="text-muted-foreground font-medium">Nenhuma turma vinculada a você</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">Vá até <strong>Matérias</strong> e vincule as suas matérias às turmas em que você leciona.</p>
+            </>
+          ) : filterTurma && disciplinas.length === 0 ? (
+            <>
+              <p className="text-muted-foreground font-medium">Nenhuma matéria vinculada a esta turma para este professor</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">Vá até <strong>Matérias</strong> para vincular suas matérias a esta turma.</p>
+            </>
+          ) : (
+            <p className="text-muted-foreground">Selecione a turma e a disciplina para visualizar as notas</p>
+          )}
         </div>
       ) : loading ? <LoadingSpinner /> : (
         <div className={cn('bg-card border-2 rounded-xl shadow-card overflow-hidden', DISC_BORDER[cor])}>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Palette, Plus, Edit2, Trash2, BookOpen, BarChart3, ClipboardList, FileText, Eye } from 'lucide-react';
+import { Palette, Plus, Edit2, Trash2, BookOpen, BarChart3, ClipboardList, FileText, Eye, Users, Check } from 'lucide-react';
 import { PageHeader, TableContainer } from '@/components/ui-escola';
 import { usePermissions } from '@/hooks/use-permissions';
 import { Button } from '@/components/ui/button';
@@ -41,17 +41,69 @@ export function getDisciplinaBg(cor?: string) {
 
 export default function Materias() {
   const [disciplinas, setDisciplinas] = useState<any[]>([]);
+  const [turmas, setTurmas] = useState<any[]>([]);
+  const [vinculos, setVinculos] = useState<{ disciplina_id: string; turma_id: string }[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState({ nome: '', cor: 'azul' });
+  const [vincDialogOpen, setVincDialogOpen] = useState(false);
+  const [vincDisciplina, setVincDisciplina] = useState<any>(null);
+  const [vincSelecionadas, setVincSelecionadas] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const { userId, canEdit, readOnly } = usePermissions();
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [userId]);
 
   async function load() {
-    const { data } = await supabase.from('disciplinas').select('*').order('nome');
-    setDisciplinas(data || []);
+    const [{ data: disc }, { data: t }, vincRes] = await Promise.all([
+      supabase.from('disciplinas').select('*').order('nome'),
+      supabase.from('turmas').select('id, nome, serie').order('nome'),
+      userId
+        ? supabase.from('turma_disciplinas').select('disciplina_id, turma_id').eq('user_id', userId)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+    setDisciplinas(disc || []);
+    setTurmas(t || []);
+    setVinculos(vincRes.data || []);
+  }
+
+  function abrirVinculos(d: any) {
+    setVincDisciplina(d);
+    const atuais = vinculos.filter(v => v.disciplina_id === d.id).map(v => v.turma_id);
+    setVincSelecionadas(new Set(atuais));
+    setVincDialogOpen(true);
+  }
+
+  function toggleVinc(turmaId: string) {
+    setVincSelecionadas(prev => {
+      const next = new Set(prev);
+      if (next.has(turmaId)) next.delete(turmaId);
+      else next.add(turmaId);
+      return next;
+    });
+  }
+
+  async function salvarVinculos() {
+    if (!vincDisciplina || !userId) return;
+    const atuais = new Set(vinculos.filter(v => v.disciplina_id === vincDisciplina.id).map(v => v.turma_id));
+    const novas = vincSelecionadas;
+    const adicionar = Array.from(novas).filter(id => !atuais.has(id));
+    const remover = Array.from(atuais).filter(id => !novas.has(id));
+
+    if (adicionar.length) {
+      await supabase.from('turma_disciplinas').insert(
+        adicionar.map(turma_id => ({ turma_id, disciplina_id: vincDisciplina.id, user_id: userId }))
+      );
+    }
+    if (remover.length) {
+      await supabase.from('turma_disciplinas').delete()
+        .eq('disciplina_id', vincDisciplina.id)
+        .eq('user_id', userId)
+        .in('turma_id', remover);
+    }
+    toast({ title: 'Vínculos atualizados!', description: `${vincDisciplina.nome} agora aparece apenas nas turmas selecionadas.` });
+    setVincDialogOpen(false);
+    load();
   }
 
   async function save() {
@@ -141,7 +193,9 @@ export default function Materias() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {disciplinas.map((d) => (
+          {disciplinas.map((d) => {
+            const turmasVinc = vinculos.filter(v => v.disciplina_id === d.id).map(v => turmas.find(t => t.id === v.turma_id)).filter(Boolean);
+            return (
             <div key={d.id} className={cn('rounded-xl border-2 p-4 transition-all hover:shadow-md', getDisciplinaBg(d.cor))}>
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2.5">
@@ -150,6 +204,13 @@ export default function Materias() {
                 </div>
                 {canEdit && (
                   <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => abrirVinculos(d)}
+                      className="p-1.5 rounded-lg hover:bg-background/60 text-muted-foreground hover:text-primary transition-colors"
+                      title="Vincular turmas"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={() => { setEditing(d); setForm({ nome: d.nome, cor: d.cor || 'azul' }); setDialogOpen(true); }}
                       className="p-1.5 rounded-lg hover:bg-background/60 text-muted-foreground hover:text-foreground transition-colors"
@@ -165,6 +226,18 @@ export default function Materias() {
                   </div>
                 )}
               </div>
+              <div className="mb-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-1 font-semibold">Turmas vinculadas</p>
+                {turmasVinc.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">Nenhuma turma — clique em <Users className="inline w-3 h-3 mx-0.5" /> para vincular</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {turmasVinc.map((t: any) => (
+                      <span key={t.id} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{t.nome}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-background/60 text-muted-foreground">Plano de Aula</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-background/60 text-muted-foreground">Notas</span>
@@ -172,7 +245,8 @@ export default function Materias() {
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-background/60 text-muted-foreground">Relatórios</span>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -211,6 +285,57 @@ export default function Materias() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={save}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: vincular turmas à matéria */}
+      <Dialog open={vincDialogOpen} onOpenChange={setVincDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {vincDisciplina && <span className={cn('w-3 h-3 rounded-full', getDisciplinaDot(vincDisciplina.cor))} />}
+              Vincular {vincDisciplina?.nome} às turmas
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-xs text-muted-foreground mb-3">
+              Selecione apenas as turmas em que <strong>você</strong> leciona esta matéria. Isso garante que ela apareça apenas onde for válida (notas, planos, etc).
+            </p>
+            {turmas.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic text-center py-6">Nenhuma turma cadastrada.</p>
+            ) : (
+              <div className="space-y-1 max-h-72 overflow-y-auto">
+                {turmas.map(t => {
+                  const checked = vincSelecionadas.has(t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => toggleVinc(t.id)}
+                      className={cn(
+                        'w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-all text-left',
+                        checked ? 'bg-primary/10 border-primary' : 'bg-background border-border hover:bg-muted'
+                      )}
+                    >
+                      <span className={cn(
+                        'w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all',
+                        checked ? 'bg-primary border-primary' : 'border-muted-foreground/30'
+                      )}>
+                        {checked && <Check className="w-3.5 h-3.5 text-primary-foreground" />}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-foreground">{t.nome}</p>
+                        <p className="text-xs text-muted-foreground">{t.serie}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVincDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={salvarVinculos}>Salvar vínculos</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
