@@ -288,6 +288,57 @@ export default function Materias() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog: vincular turmas à matéria */}
+      <Dialog open={vincDialogOpen} onOpenChange={setVincDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {vincDisciplina && <span className={cn('w-3 h-3 rounded-full', getDisciplinaDot(vincDisciplina.cor))} />}
+              Vincular {vincDisciplina?.nome} às turmas
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-xs text-muted-foreground mb-3">
+              Selecione apenas as turmas em que <strong>você</strong> leciona esta matéria. Isso garante que ela apareça apenas onde for válida (notas, planos, etc).
+            </p>
+            {turmas.length === 0 ? (
+              <p className="text-sm text-muted-foreground italic text-center py-6">Nenhuma turma cadastrada.</p>
+            ) : (
+              <div className="space-y-1 max-h-72 overflow-y-auto">
+                {turmas.map(t => {
+                  const checked = vincSelecionadas.has(t.id);
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => toggleVinc(t.id)}
+                      className={cn(
+                        'w-full flex items-center gap-3 px-3 py-2 rounded-lg border transition-all text-left',
+                        checked ? 'bg-primary/10 border-primary' : 'bg-background border-border hover:bg-muted'
+                      )}
+                    >
+                      <span className={cn(
+                        'w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all',
+                        checked ? 'bg-primary border-primary' : 'border-muted-foreground/30'
+                      )}>
+                        {checked && <Check className="w-3.5 h-3.5 text-primary-foreground" />}
+                      </span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-foreground">{t.nome}</p>
+                        <p className="text-xs text-muted-foreground">{t.serie}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVincDialogOpen(false)}>Cancelar</Button>
+            <Button onClick={salvarVinculos}>Salvar vínculos</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
