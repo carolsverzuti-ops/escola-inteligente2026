@@ -4,6 +4,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { Sidebar, MobileSidebar } from "@/components/Sidebar";
 import Dashboard from "@/pages/Dashboard";
+import GestaoDashboard from "@/pages/GestaoDashboard";
 import Turmas from "@/pages/Turmas";
 import Alunos from "@/pages/Alunos";
 import Notas from "@/pages/Notas";
@@ -17,6 +18,7 @@ import Login from "@/pages/Login";
 import Cadastro from "@/pages/Cadastro";
 import RecuperarSenha from "@/pages/RecuperarSenha";
 import RedefinirSenha from "@/pages/RedefinirSenha";
+import { usePermissions } from "@/hooks/use-permissions";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +40,7 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 function ProtectedRoutes() {
   const { session, loading } = useAuth();
+  const { isGestao } = usePermissions();
 
   if (loading) {
     return (
@@ -54,7 +57,8 @@ function ProtectedRoutes() {
   return (
     <Layout>
       <Routes>
-        <Route path="/" element={<Dashboard />} />
+        <Route path="/" element={isGestao ? <Navigate to="/gestao" replace /> : <Dashboard />} />
+        <Route path="/gestao" element={isGestao ? <GestaoDashboard /> : <Navigate to="/" replace />} />
         <Route path="/turmas" element={<Turmas />} />
         <Route path="/alunos" element={<Alunos />} />
         <Route path="/materias" element={<Materias />} />
