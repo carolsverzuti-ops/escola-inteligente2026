@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Palette, Plus, Edit2, Trash2, BookOpen, BarChart3, ClipboardList, FileText, Eye } from 'lucide-react';
+import { Palette, Plus, Edit2, Trash2, BookOpen, BarChart3, ClipboardList, FileText, Eye, Users, Check } from 'lucide-react';
 import { PageHeader, TableContainer } from '@/components/ui-escola';
 import { usePermissions } from '@/hooks/use-permissions';
 import { Button } from '@/components/ui/button';
