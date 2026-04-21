@@ -16,11 +16,13 @@ import {
   Menu,
   Palette,
   LogOut,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
+import { usePermissions } from '@/hooks/use-permissions';
 
-const navItems = [
+const navProfessor = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/' },
   { label: 'Turmas', icon: School, path: '/turmas' },
   { label: 'Alunos', icon: GraduationCap, path: '/alunos' },
@@ -32,6 +34,24 @@ const navItems = [
   { label: 'Relatórios', icon: BarChart3, path: '/relatorios' },
   { label: 'Configurações', icon: Settings, path: '/configuracoes' },
 ];
+
+const navGestao = [
+  { label: 'Painel da Gestão', icon: Building2, path: '/gestao' },
+  { label: 'Turmas', icon: School, path: '/turmas' },
+  { label: 'Alunos', icon: GraduationCap, path: '/alunos' },
+  { label: 'Notas (todos)', icon: ClipboardList, path: '/notas' },
+  { label: 'Planos de Aula', icon: BookOpen, path: '/plano-aula' },
+  { label: 'Ocorrências', icon: Laptop, path: '/ocorrencias' },
+  { label: 'Relatórios', icon: BarChart3, path: '/relatorios' },
+  { label: 'Configurações', icon: Settings, path: '/configuracoes' },
+];
+
+const ROLE_LABEL: Record<string, string> = {
+  professor: 'Professor(a)',
+  coordenador: 'Coordenação',
+  direcao: 'Direção',
+  vice_direcao: 'Vice-direção',
+};
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
