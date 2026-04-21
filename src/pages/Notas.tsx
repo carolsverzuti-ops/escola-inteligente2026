@@ -633,7 +633,19 @@ export default function Notas() {
       {!filterTurma || !filterDisciplina ? (
         <div className="flex flex-col items-center justify-center py-20 text-center bg-card border border-border rounded-xl">
           <AlertCircle className="w-10 h-10 text-muted-foreground/30 mb-2" />
-          <p className="text-muted-foreground">Selecione a turma e a disciplina para visualizar as notas</p>
+          {turmas.length === 0 ? (
+            <>
+              <p className="text-muted-foreground font-medium">Nenhuma turma vinculada a você</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">Vá até <strong>Matérias</strong> e vincule as suas matérias às turmas em que você leciona.</p>
+            </>
+          ) : filterTurma && disciplinas.length === 0 ? (
+            <>
+              <p className="text-muted-foreground font-medium">Nenhuma matéria vinculada a esta turma para este professor</p>
+              <p className="text-sm text-muted-foreground/70 mt-1">Vá até <strong>Matérias</strong> para vincular suas matérias a esta turma.</p>
+            </>
+          ) : (
+            <p className="text-muted-foreground">Selecione a turma e a disciplina para visualizar as notas</p>
+          )}
         </div>
       ) : loading ? <LoadingSpinner /> : (
         <div className={cn('bg-card border-2 rounded-xl shadow-card overflow-hidden', DISC_BORDER[cor])}>
