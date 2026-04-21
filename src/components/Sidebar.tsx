@@ -57,6 +57,8 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { signOut, profile, role } = useAuth();
+  const { isGestao } = usePermissions();
+  const navItems = isGestao ? navGestao : navProfessor;
 
   return (
     <aside
@@ -83,7 +85,7 @@ export function Sidebar() {
         <div className="px-4 py-3 border-b border-sidebar-border">
           <p className="text-xs text-sidebar-foreground/60 truncate">{profile?.nome || profile?.email}</p>
           <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sidebar-primary/20 text-sidebar-primary capitalize">
-            {role || 'professor'}
+            {ROLE_LABEL[role || 'professor'] ?? role}
           </span>
         </div>
       )}
@@ -148,6 +150,8 @@ export function MobileSidebar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   const { signOut, profile, role } = useAuth();
+  const { isGestao } = usePermissions();
+  const navItems = isGestao ? navGestao : navProfessor;
 
   return (
     <>
@@ -173,7 +177,7 @@ export function MobileSidebar() {
             <div className="px-4 py-3 border-b border-sidebar-border">
               <p className="text-xs text-sidebar-foreground/60 truncate">{profile?.nome || profile?.email}</p>
               <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sidebar-primary/20 text-sidebar-primary capitalize">
-                {role || 'professor'}
+                {ROLE_LABEL[role || 'professor'] ?? role}
               </span>
             </div>
             <nav className="flex-1 overflow-y-auto py-3 space-y-0.5 px-2">
