@@ -214,7 +214,7 @@ export default function GestaoDashboard() {
       <PageHeader
         title="Painel da Gestão"
         subtitle="Visão consolidada de toda a escola — somente leitura"
-        icon={<Building2 className="w-6 h-6" />}
+        
       />
 
       {/* Filtros */}
@@ -272,17 +272,17 @@ export default function GestaoDashboard() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <StatCard label="Professores" value={kpi.professores} icon={<Users className="w-5 h-5" />} />
-        <StatCard label="Turmas" value={kpi.turmas} icon={<GraduationCap className="w-5 h-5" />} />
-        <StatCard label="Alunos" value={kpi.alunos} icon={<GraduationCap className="w-5 h-5" />} />
-        <StatCard label="Aprovados" value={kpi.aprovados} icon={<CheckCircle className="w-5 h-5" />} variant="success" />
-        <StatCard label="Recuperação" value={kpi.recuperacao} icon={<Clock className="w-5 h-5" />} variant="warning" />
-        <StatCard label="Abaixo da média" value={kpi.abaixoMedia} icon={<ClipboardList className="w-5 h-5" />} variant="danger" />
+        <StatCard title="Professores" value={kpi.professores} icon={<Users className="w-5 h-5" />} />
+        <StatCard title="Turmas" value={kpi.turmas} icon={<GraduationCap className="w-5 h-5" />} />
+        <StatCard title="Alunos" value={kpi.alunos} icon={<GraduationCap className="w-5 h-5" />} />
+        <StatCard title="Aprovados" value={kpi.aprovados} icon={<CheckCircle className="w-5 h-5" />} color="green" />
+        <StatCard title="Recuperação" value={kpi.recuperacao} icon={<Clock className="w-5 h-5" />} color="yellow" />
+        <StatCard title="Abaixo da média" value={kpi.abaixoMedia} icon={<ClipboardList className="w-5 h-5" />} color="red" />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-        <StatCard label="Planos aprovados" value={kpi.planosAprovados} icon={<CheckCircle className="w-5 h-5" />} variant="success" />
-        <StatCard label="Planos pendentes" value={kpi.planosPendentes} icon={<BookOpen className="w-5 h-5" />} variant="warning" />
-        <StatCard label="Ocorrências" value={kpi.ocorrencias} icon={<Laptop className="w-5 h-5" />} />
+        <StatCard title="Planos aprovados" value={kpi.planosAprovados} icon={<CheckCircle className="w-5 h-5" />} color="green" />
+        <StatCard title="Planos pendentes" value={kpi.planosPendentes} icon={<BookOpen className="w-5 h-5" />} color="yellow" />
+        <StatCard title="Ocorrências" value={kpi.ocorrencias} icon={<Laptop className="w-5 h-5" />} />
       </div>
 
       {/* Gráficos */}
