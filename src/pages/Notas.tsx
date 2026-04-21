@@ -561,12 +561,18 @@ export default function Notas() {
       <FilterBar>
         <Select value={filterTurma} onValueChange={setFilterTurma}>
           <SelectTrigger className="w-36 h-8 text-sm bg-background"><SelectValue placeholder="Turma" /></SelectTrigger>
-          <SelectContent>{turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}</SelectContent>
+          <SelectContent>
+            {turmas.length === 0 ? (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">Nenhuma turma vinculada</div>
+            ) : turmas.map(t => <SelectItem key={t.id} value={t.id}>{t.nome}</SelectItem>)}
+          </SelectContent>
         </Select>
-        <Select value={filterDisciplina} onValueChange={setFilterDisciplina}>
+        <Select value={filterDisciplina} onValueChange={setFilterDisciplina} disabled={!filterTurma || disciplinas.length === 0}>
           <SelectTrigger className="w-48 h-8 text-sm bg-background"><SelectValue placeholder="Disciplina" /></SelectTrigger>
           <SelectContent>
-            {disciplinas.map(d => (
+            {disciplinas.length === 0 ? (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">Nenhuma matéria vinculada a esta turma</div>
+            ) : disciplinas.map(d => (
               <SelectItem key={d.id} value={d.id}>
                 <span className="flex items-center gap-2">
                   <span className={cn('w-2.5 h-2.5 rounded-full', getDisciplinaDot(d.cor))} />
