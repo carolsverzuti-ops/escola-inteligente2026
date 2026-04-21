@@ -193,7 +193,9 @@ export default function Materias() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {disciplinas.map((d) => (
+          {disciplinas.map((d) => {
+            const turmasVinc = vinculos.filter(v => v.disciplina_id === d.id).map(v => turmas.find(t => t.id === v.turma_id)).filter(Boolean);
+            return (
             <div key={d.id} className={cn('rounded-xl border-2 p-4 transition-all hover:shadow-md', getDisciplinaBg(d.cor))}>
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-2.5">
@@ -202,6 +204,13 @@ export default function Materias() {
                 </div>
                 {canEdit && (
                   <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={() => abrirVinculos(d)}
+                      className="p-1.5 rounded-lg hover:bg-background/60 text-muted-foreground hover:text-primary transition-colors"
+                      title="Vincular turmas"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={() => { setEditing(d); setForm({ nome: d.nome, cor: d.cor || 'azul' }); setDialogOpen(true); }}
                       className="p-1.5 rounded-lg hover:bg-background/60 text-muted-foreground hover:text-foreground transition-colors"
@@ -217,6 +226,18 @@ export default function Materias() {
                   </div>
                 )}
               </div>
+              <div className="mb-2">
+                <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70 mb-1 font-semibold">Turmas vinculadas</p>
+                {turmasVinc.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">Nenhuma turma — clique em <Users className="inline w-3 h-3 mx-0.5" /> para vincular</p>
+                ) : (
+                  <div className="flex flex-wrap gap-1">
+                    {turmasVinc.map((t: any) => (
+                      <span key={t.id} className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{t.nome}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-background/60 text-muted-foreground">Plano de Aula</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-background/60 text-muted-foreground">Notas</span>
@@ -224,7 +245,8 @@ export default function Materias() {
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-background/60 text-muted-foreground">Relatórios</span>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
