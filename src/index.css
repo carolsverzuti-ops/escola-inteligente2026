@@ -1,66 +1,74 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,500;9..144,600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    /* Painel Escolar Inteligente - Azul institucional moderno */
-    --background: 210 20% 98%;
-    --foreground: 220 25% 10%;
+    /* Painel Escolar Inteligente — paleta acolhedora "agenda da professora"
+       Off-white quente, terracota suave, bege/marrom claro e verde sálvia */
+
+    --background: 36 25% 97%;            /* off-white quente #FAF7F2 */
+    --foreground: 25 18% 18%;            /* marrom escuro suave */
 
     --card: 0 0% 100%;
-    --card-foreground: 220 25% 10%;
+    --card-foreground: 25 18% 18%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 10%;
+    --popover-foreground: 25 18% 18%;
 
-    --primary: 214 90% 38%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 22 35% 45%;               /* terracota / marrom suave #8B5E3C */
+    --primary-foreground: 36 30% 98%;
+    --primary-light: 24 40% 92%;         /* nude bem clarinho */
+    --primary-glow: 18 50% 62%;          /* terracota mais quente */
 
-    --primary-light: 214 90% 92%;
-    --primary-glow: 214 80% 55%;
+    --secondary: 30 25% 92%;             /* bege claro */
+    --secondary-foreground: 25 20% 25%;
 
-    --secondary: 210 20% 94%;
-    --secondary-foreground: 220 25% 20%;
+    --muted: 30 20% 95%;
+    --muted-foreground: 25 12% 48%;
 
-    --muted: 210 20% 96%;
-    --muted-foreground: 215 15% 50%;
-
-    --accent: 214 90% 38%;
+    --accent: 134 18% 55%;               /* verde sálvia #7A9E7E */
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84% 55%;
+    /* Estados — versões suaves/pastel */
+    --destructive: 0 55% 62%;            /* vermelho suave */
     --destructive-foreground: 0 0% 100%;
+    --danger-light: 0 60% 95%;
 
-    --success: 142 72% 29%;
+    --success: 134 28% 42%;              /* verde sálvia mais escuro */
     --success-foreground: 0 0% 100%;
-    --success-light: 142 60% 92%;
+    --success-light: 134 30% 92%;
 
-    --warning: 38 92% 48%;
-    --warning-foreground: 0 0% 100%;
-    --warning-light: 38 92% 92%;
+    --warning: 38 65% 55%;               /* amarelo mostarda suave */
+    --warning-foreground: 30 30% 15%;
+    --warning-light: 42 70% 92%;
 
-    --danger-light: 0 84% 94%;
+    --rose: 4 50% 75%;                   /* rosé suave #D9A5A5 */
+    --rose-foreground: 0 0% 100%;
 
-    --border: 214 20% 88%;
-    --input: 214 20% 88%;
-    --ring: 214 90% 38%;
+    --border: 30 18% 88%;
+    --input: 30 18% 88%;
+    --ring: 22 35% 45%;
 
-    --radius: 0.5rem;
+    --radius: 0.875rem;                  /* mais arredondado */
 
-    --sidebar-background: 220 30% 12%;
-    --sidebar-foreground: 210 20% 85%;
-    --sidebar-primary: 214 90% 55%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 25% 20%;
-    --sidebar-accent-foreground: 210 20% 90%;
-    --sidebar-border: 220 20% 20%;
-    --sidebar-ring: 214 90% 55%;
+    /* Sidebar — bege claro acolhedor */
+    --sidebar-background: 30 20% 94%;    /* #EDE7E3 */
+    --sidebar-foreground: 25 15% 30%;
+    --sidebar-primary: 22 35% 45%;       /* terracota */
+    --sidebar-primary-foreground: 36 30% 98%;
+    --sidebar-accent: 30 25% 88%;        /* hover bege */
+    --sidebar-accent-foreground: 25 22% 22%;
+    --sidebar-border: 30 15% 84%;
+    --sidebar-ring: 22 35% 45%;
 
-    --gradient-hero: linear-gradient(135deg, hsl(214 90% 38%), hsl(214 80% 55%));
-    --gradient-sidebar: linear-gradient(180deg, hsl(220 30% 12%), hsl(220 35% 8%));
-    --shadow-card: 0 1px 3px 0 hsl(220 25% 10% / 0.08), 0 1px 2px -1px hsl(220 25% 10% / 0.04);
-    --shadow-elevated: 0 4px 16px -2px hsl(214 90% 38% / 0.12), 0 2px 6px -2px hsl(220 25% 10% / 0.05);
+    --gradient-hero: linear-gradient(135deg, hsl(30 30% 96%), hsl(24 35% 90%));
+    --gradient-sidebar: linear-gradient(180deg, hsl(30 22% 95%), hsl(28 18% 90%));
+    --shadow-card: 0 1px 2px 0 hsl(25 18% 18% / 0.04), 0 1px 3px 0 hsl(25 18% 18% / 0.04);
+    --shadow-elevated: 0 8px 24px -8px hsl(22 35% 45% / 0.18), 0 2px 6px -2px hsl(25 18% 18% / 0.05);
+    --shadow-soft: 0 4px 14px -6px hsl(25 18% 30% / 0.10);
   }
 }
 
@@ -71,7 +79,15 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Fraunces', 'Plus Jakarta Sans', serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
   }
 }
 
@@ -96,13 +112,13 @@
     @apply border-collapse w-full text-sm;
   }
   .table-sheet th {
-    @apply bg-secondary text-muted-foreground font-semibold px-3 py-2 text-left border-b border-border sticky top-0 z-10;
+    @apply bg-secondary text-muted-foreground font-medium px-3 py-2 text-left border-b border-border sticky top-0 z-10;
   }
   .table-sheet td {
     @apply px-3 py-2 border-b border-border/50;
   }
   .table-sheet tr:hover td {
-    @apply bg-primary-light/30;
+    @apply bg-primary-light/40;
   }
 
   .status-badge {

@@ -60,6 +60,10 @@ export default {
         danger: {
           light: "hsl(var(--danger-light))",
         },
+        rose: {
+          DEFAULT: "hsl(var(--rose))",
+          foreground: "hsl(var(--rose-foreground))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -79,6 +83,11 @@ export default {
       boxShadow: {
         card: "var(--shadow-card)",
         elevated: "var(--shadow-elevated)",
+        soft: "var(--shadow-soft)",
+      },
+      fontFamily: {
+        sans: ['"Plus Jakarta Sans"', "ui-sans-serif", "system-ui", "sans-serif"],
+        display: ['Fraunces', '"Plus Jakarta Sans"', "serif"],
       },
       backgroundImage: {
         "gradient-hero": "var(--gradient-hero)",
