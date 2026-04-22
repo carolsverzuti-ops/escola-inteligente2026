@@ -372,6 +372,47 @@ export type Database = {
           },
         ]
       }
+      plano_anexos: {
+        Row: {
+          created_at: string
+          id: string
+          mime_type: string | null
+          nome_arquivo: string
+          plano_id: string
+          storage_path: string
+          tamanho_bytes: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          mime_type?: string | null
+          nome_arquivo: string
+          plano_id: string
+          storage_path: string
+          tamanho_bytes?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          mime_type?: string | null
+          nome_arquivo?: string
+          plano_id?: string
+          storage_path?: string
+          tamanho_bytes?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plano_anexos_plano_id_fkey"
+            columns: ["plano_id"]
+            isOneToOne: false
+            referencedRelation: "planos_aula"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       planos_aula: {
         Row: {
           aprendizagem_essencial: string | null
