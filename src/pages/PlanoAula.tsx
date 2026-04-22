@@ -191,6 +191,13 @@ export default function PlanoAula() {
     const payload = { ...form, disciplina_id: form.disciplina_id || null };
     if (editingPlano) {
       await db.from('planos_aula').update(payload).eq('id', editingPlano.id);
+      // Sobe anexos pendentes (caso ainda restem)
+      if (pendingAnexos.length > 0) {
+        for (const f of pendingAnexos) {
+          await uploadAnexo(editingPlano, f);
+        }
+        setPendingAnexos([]);
+      }
       toast({ title: 'Plano atualizado!' });
       setSaving(false);
       setDialogOpen(false);
@@ -201,15 +208,23 @@ export default function PlanoAula() {
         .insert({ ...payload, user_id: userId })
         .select('*, turmas(nome), disciplinas(nome, cor)')
         .single();
-      toast({ title: 'Plano cadastrado! Agora você pode anexar a atividade adaptada.' });
-      setSaving(false);
-      await loadData();
-      // Mantém o dialog aberto em modo edição para permitir anexar a Atividade Adaptada
-      if (novo) {
-        setEditingPlano(novo as PlanoAula);
-      } else {
-        setDialogOpen(false);
+      // Sobe os PDFs selecionados durante a criação
+      let anexosCount = 0;
+      if (novo && pendingAnexos.length > 0) {
+        for (const f of pendingAnexos) {
+          await uploadAnexo(novo as PlanoAula, f);
+          anexosCount++;
+        }
+        setPendingAnexos([]);
       }
+      toast({
+        title: anexosCount > 0
+          ? `Plano cadastrado com ${anexosCount} atividade(s) adaptada(s)!`
+          : 'Plano cadastrado!',
+      });
+      setSaving(false);
+      setDialogOpen(false);
+      await loadData();
       return;
     }
   }
