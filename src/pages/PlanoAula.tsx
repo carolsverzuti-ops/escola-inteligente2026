@@ -188,13 +188,26 @@ export default function PlanoAula() {
     if (editingPlano) {
       await db.from('planos_aula').update(payload).eq('id', editingPlano.id);
       toast({ title: 'Plano atualizado!' });
+      setSaving(false);
+      setDialogOpen(false);
+      loadData();
     } else {
-      await db.from('planos_aula').insert({ ...payload, user_id: userId });
-      toast({ title: 'Plano cadastrado!' });
+      const { data: novo } = await db
+        .from('planos_aula')
+        .insert({ ...payload, user_id: userId })
+        .select('*, turmas(nome), disciplinas(nome, cor)')
+        .single();
+      toast({ title: 'Plano cadastrado! Agora você pode anexar a atividade adaptada.' });
+      setSaving(false);
+      await loadData();
+      // Mantém o dialog aberto em modo edição para permitir anexar a Atividade Adaptada
+      if (novo) {
+        setEditingPlano(novo as PlanoAula);
+      } else {
+        setDialogOpen(false);
+      }
+      return;
     }
-    setSaving(false);
-    setDialogOpen(false);
-    loadData();
   }
 
   async function remove(id: string) {
@@ -768,11 +781,86 @@ export default function PlanoAula() {
                   <div className="space-y-1.5"><Label>Material Digital</Label><Input placeholder="Links, plataformas..." value={form.material_digital} onChange={e => setForm({ ...form, material_digital: e.target.value })} /></div>
                   <div className="space-y-1.5"><Label>Aulas Previstas no Bimestre</Label><Input type="number" value={form.aulas_previstas} onChange={e => setForm({ ...form, aulas_previstas: parseInt(e.target.value) })} /></div>
                 </div>
-                <div className="space-y-1.5"><Label>Avaliação da Aprendizagem</Label><Textarea placeholder="Como será feita a avaliação..." value={form.avaliacao_aprendizagem} onChange={e => setForm({ ...form, avaliacao_aprendizagem: e.target.value })} rows={2} /></div>
-              </>
-            )}
-            <div className="space-y-1.5"><Label>Professor</Label><Input placeholder="Nome do professor" value={form.professor} onChange={e => setForm({ ...form, professor: e.target.value })} /></div>
-          </div>
+                 <div className="space-y-1.5"><Label>Avaliação da Aprendizagem</Label><Textarea placeholder="Como será feita a avaliação..." value={form.avaliacao_aprendizagem} onChange={e => setForm({ ...form, avaliacao_aprendizagem: e.target.value })} rows={2} /></div>
+               </>
+             )}
+             <div className="space-y-1.5"><Label>Professor</Label><Input placeholder="Nome do professor" value={form.professor} onChange={e => setForm({ ...form, professor: e.target.value })} /></div>
+
+             {/* ─── Atividade Adaptada (PEI) ─── */}
+             <div className="rounded-lg border-2 border-dashed border-primary/40 bg-primary/5 p-4 space-y-3">
+               <div className="flex items-center gap-2">
+                 <Paperclip className="w-4 h-4 text-primary" />
+                 <Label className="text-sm font-semibold text-foreground">Atividade Adaptada (PEI)</Label>
+                 {editingPlano && getPlanoAnexos(editingPlano.id).length > 0 && (
+                   <span className="text-xs px-2 py-0.5 rounded-full bg-success/15 text-success font-medium">
+                     {getPlanoAnexos(editingPlano.id).length} anexo(s)
+                   </span>
+                 )}
+               </div>
+               <p className="text-xs text-muted-foreground">
+                 Anexe arquivos PDF com atividades adaptadas para alunos com PEI. A coordenação pode visualizar os anexos.
+               </p>
+
+               {!editingPlano ? (
+                 <p className="text-xs italic text-muted-foreground bg-background/60 rounded p-2 border border-border">
+                   💡 Salve o plano primeiro. Após salvar, edite o plano para anexar a atividade adaptada em PDF.
+                 </p>
+               ) : (
+                 <>
+                   {getPlanoAnexos(editingPlano.id).length > 0 && (
+                     <div className="space-y-1.5">
+                       {getPlanoAnexos(editingPlano.id).map(anexo => (
+                         <div key={anexo.id} className="flex items-center gap-2 bg-background rounded p-2 border border-border text-sm">
+                           <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                           <span className="flex-1 truncate" title={anexo.nome_arquivo}>{anexo.nome_arquivo}</span>
+                           <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={() => abrirAnexo(anexo)} title="Visualizar">
+                             <Eye className="w-3.5 h-3.5" />
+                           </Button>
+                           <Button type="button" size="sm" variant="ghost" className="h-7 px-2" onClick={() => baixarAnexo(anexo)} title="Baixar">
+                             <Download className="w-3.5 h-3.5" />
+                           </Button>
+                           {canEdit && (
+                             <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" onClick={() => removerAnexo(anexo)} title="Remover">
+                               <XIcon className="w-3.5 h-3.5" />
+                             </Button>
+                           )}
+                         </div>
+                       ))}
+                     </div>
+                   )}
+                   {canEdit && (
+                     <div>
+                       <input
+                         type="file"
+                         accept="application/pdf"
+                         id="atividade-adaptada-upload"
+                         className="hidden"
+                         onChange={async (e) => {
+                           const file = e.target.files?.[0];
+                           if (file && editingPlano) {
+                             await uploadAnexo(editingPlano, file);
+                             e.target.value = '';
+                           }
+                         }}
+                         disabled={uploadingAnexo}
+                       />
+                       <Button
+                         type="button"
+                         variant="outline"
+                         size="sm"
+                         disabled={uploadingAnexo}
+                         onClick={() => document.getElementById('atividade-adaptada-upload')?.click()}
+                         className="w-full border-primary/40 hover:bg-primary/10"
+                       >
+                         <Upload className="w-4 h-4 mr-1.5" />
+                         {uploadingAnexo ? 'Enviando...' : (getPlanoAnexos(editingPlano.id).length > 0 ? 'Adicionar outro PDF' : 'Adicionar atividade adaptada (PDF)')}
+                       </Button>
+                     </div>
+                   )}
+                 </>
+               )}
+             </div>
+           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={save} disabled={saving}>{saving ? 'Salvando...' : 'Salvar Plano'}</Button>
