@@ -832,6 +832,86 @@ export default function PlanoAula() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog de anexos (atividades adaptadas - PEI) */}
+      <Dialog open={!!anexosDialog} onOpenChange={() => setAnexosDialog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Paperclip className="w-5 h-5 text-primary" /> Atividades Adaptadas (PEI)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              {anexosDialog?.turmas?.nome} · {anexosDialog?.disciplinas?.nome} · {anexosDialog?.data_aula && formatDate(anexosDialog.data_aula)}
+            </p>
+
+            {anexosDialog && (() => {
+              const lista = getPlanoAnexos(anexosDialog.id);
+              return lista.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-lg">
+                  Nenhuma atividade anexada ainda
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {lista.map(ax => (
+                    <div key={ax.id} className="flex items-center gap-2 bg-secondary/50 rounded-lg p-2.5 border border-border">
+                      <FileText className="w-5 h-5 text-primary flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{ax.nome_arquivo}</p>
+                        {ax.tamanho_bytes && (
+                          <p className="text-xs text-muted-foreground">{(ax.tamanho_bytes / 1024).toFixed(0)} KB</p>
+                        )}
+                      </div>
+                      <button onClick={() => abrirAnexo(ax)} className="p-1.5 rounded hover:bg-primary/10" title="Visualizar">
+                        <Eye className="w-4 h-4 text-primary" />
+                      </button>
+                      <button onClick={() => baixarAnexo(ax)} className="p-1.5 rounded hover:bg-primary/10" title="Baixar">
+                        <Download className="w-4 h-4 text-primary" />
+                      </button>
+                      {canEdit && (
+                        <button onClick={() => removerAnexo(ax)} className="p-1.5 rounded hover:bg-destructive/10" title="Excluir">
+                          <XIcon className="w-4 h-4 text-destructive" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {canEdit && anexosDialog && (
+              <label className={cn(
+                'flex items-center justify-center gap-2 px-3 py-3 border-2 border-dashed border-primary/30 rounded-lg cursor-pointer hover:bg-primary/5 transition-colors',
+                uploadingAnexo && 'opacity-50 pointer-events-none'
+              )}>
+                <Upload className="w-4 h-4 text-primary" />
+                <span className="text-sm text-primary font-medium">
+                  {uploadingAnexo ? 'Enviando...' : 'Anexar PDF'}
+                </span>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  disabled={uploadingAnexo}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file && anexosDialog) await uploadAnexo(anexosDialog, file);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            )}
+
+            <p className="text-xs text-muted-foreground text-center">
+              Apenas PDF, máximo 10MB. Visível para a coordenação e gestão.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAnexosDialog(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
