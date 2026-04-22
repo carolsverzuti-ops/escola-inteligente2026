@@ -529,6 +529,7 @@ export default function PlanoAula() {
                               const isExpanded = expandedId === plano.id;
                               const temAjuste = planoTemAjuste(plano.id);
                               const planoAjustes = getPlanoAjustes(plano.id);
+                              const planoAnexos = getPlanoAnexos(plano.id);
 
                               return (
                                 <div key={plano.id} className={cn(
@@ -574,6 +575,15 @@ export default function PlanoAula() {
                                     )}
 
                                     <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                      <button className="p-1 rounded hover:bg-secondary relative" onClick={() => setAnexosDialog(plano)} title="Atividades adaptadas (PDF)">
+                                        <Paperclip className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
+                                        {planoAnexos.length > 0 && (
+                                          <span className="absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">{planoAnexos.length}</span>
+                                        )}
+                                      </button>
+                                      <button className="p-1 rounded hover:bg-secondary" onClick={() => exportarPlanoPdf(plano)} title="Exportar PDF">
+                                        <FileDown className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
+                                      </button>
                                       {canEdit && (
                                         <>
                                           <button className="p-1 rounded hover:bg-secondary" onClick={() => setAjusteDialog(plano)} title="Registrar ajuste">
