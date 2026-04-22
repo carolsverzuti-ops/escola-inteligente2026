@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   Plus, Edit2, Trash2, Copy, Search, BookOpen, Beaker, CheckCircle, Clock,
-  FolderOpen, Folder, ChevronRight, ChevronDown, FileText, AlertTriangle, PenLine, Eye
+  FolderOpen, Folder, ChevronRight, ChevronDown, FileText, AlertTriangle, PenLine, Eye,
+  Paperclip, Download, X as XIcon, Upload, FileDown
 } from 'lucide-react';
 import { PageHeader, FilterBar, EmptyState, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
@@ -16,8 +17,9 @@ import { cn } from '@/lib/utils';
 import { getDisciplinaDot } from '@/pages/Materias';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/contexts/AuthContext';
+import { exportPlanoIndividual, exportPlanos, diaDaSemana, type PlanoPdfData } from '@/lib/planoPdf';
 
-const DIAS_SEMANA = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
+const DIAS_SEMANA = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
 const DISC_BORDER: Record<string, string> = {
   azul: 'border-l-blue-500', roxo: 'border-l-purple-500', verde: 'border-l-green-500',
@@ -69,6 +71,16 @@ interface Ajuste {
   created_at: string;
 }
 
+interface Anexo {
+  id: string;
+  plano_id: string;
+  nome_arquivo: string;
+  storage_path: string;
+  mime_type?: string;
+  tamanho_bytes?: number;
+  created_at: string;
+}
+
 const emptyForm = {
   turma_id: '', disciplina_id: '', bimestre: 1, data_aula: new Date().toISOString().split('T')[0],
   dia_semana: 'Segunda-feira', numero_aulas: 2, aprendizagem_essencial: '', conteudo: '',
@@ -82,6 +94,7 @@ const db = supabase as any;
 export default function PlanoAula() {
   const [planos, setPlanos] = useState<PlanoAula[]>([]);
   const [ajustes, setAjustes] = useState<Ajuste[]>([]);
+  const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
   const [disciplinas, setDisciplinas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,6 +116,8 @@ export default function PlanoAula() {
   const [ajusteDialog, setAjusteDialog] = useState<PlanoAula | null>(null);
   const [ajusteTexto, setAjusteTexto] = useState('');
   const [savingAjuste, setSavingAjuste] = useState(false);
+  const [anexosDialog, setAnexosDialog] = useState<PlanoAula | null>(null);
+  const [uploadingAnexo, setUploadingAnexo] = useState(false);
   const { toast } = useToast();
   const { userId, canEdit, canApprove, readOnly } = usePermissions();
   const { profile } = useAuth();
@@ -122,16 +137,18 @@ export default function PlanoAula() {
   }, []);
 
   async function loadData() {
-    const [{ data: p }, { data: t }, { data: d }, { data: a }] = await Promise.all([
+    const [{ data: p }, { data: t }, { data: d }, { data: a }, { data: ax }] = await Promise.all([
       db.from('planos_aula').select('*, turmas(nome), disciplinas(nome, cor)').order('data_aula', { ascending: true }),
       supabase.from('turmas').select('id, nome').order('nome'),
       db.from('disciplinas').select('id, nome, cor').order('nome'),
       db.from('ajustes_plano').select('*').order('created_at', { ascending: false }),
+      db.from('plano_anexos').select('*').order('created_at', { ascending: false }),
     ]);
     setPlanos(p as PlanoAula[] || []);
     setTurmas(t || []);
     setDisciplinas(d || []);
     setAjustes(a as Ajuste[] || []);
+    setAnexos((ax as Anexo[]) || []);
     setLoading(false);
   }
 
@@ -209,6 +226,130 @@ export default function PlanoAula() {
     setAjusteTexto('');
     setSavingAjuste(false);
     loadData();
+  }
+
+  /* ─── Atividades adaptadas (anexos PDF) ─── */
+  function getPlanoAnexos(planoId: string) {
+    return anexos.filter(a => a.plano_id === planoId);
+  }
+
+  async function uploadAnexo(plano: PlanoAula, file: File) {
+    if (!canEdit || !userId) return;
+    if (file.type !== 'application/pdf') {
+      toast({ title: 'Apenas arquivos PDF', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'Arquivo muito grande (máx 10MB)', variant: 'destructive' });
+      return;
+    }
+    setUploadingAnexo(true);
+    const ts = Date.now();
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${userId}/${plano.id}/${ts}_${safeName}`;
+    const { error: upErr } = await supabase.storage.from('plano-anexos').upload(path, file, {
+      cacheControl: '3600',
+      contentType: 'application/pdf',
+    });
+    if (upErr) {
+      toast({ title: 'Erro ao enviar', description: upErr.message, variant: 'destructive' });
+      setUploadingAnexo(false);
+      return;
+    }
+    const { error: insErr } = await db.from('plano_anexos').insert({
+      plano_id: plano.id,
+      user_id: userId,
+      nome_arquivo: file.name,
+      storage_path: path,
+      mime_type: file.type,
+      tamanho_bytes: file.size,
+    });
+    if (insErr) {
+      await supabase.storage.from('plano-anexos').remove([path]);
+      toast({ title: 'Erro ao salvar registro', description: insErr.message, variant: 'destructive' });
+    } else {
+      toast({ title: '📎 Atividade adaptada anexada!' });
+      await loadData();
+    }
+    setUploadingAnexo(false);
+  }
+
+  async function abrirAnexo(anexo: Anexo) {
+    const { data, error } = await supabase.storage
+      .from('plano-anexos')
+      .createSignedUrl(anexo.storage_path, 60 * 10);
+    if (error || !data) return toast({ title: 'Erro ao abrir', variant: 'destructive' });
+    window.open(data.signedUrl, '_blank');
+  }
+
+  async function baixarAnexo(anexo: Anexo) {
+    const { data, error } = await supabase.storage
+      .from('plano-anexos')
+      .createSignedUrl(anexo.storage_path, 60 * 10, { download: anexo.nome_arquivo });
+    if (error || !data) return toast({ title: 'Erro ao baixar', variant: 'destructive' });
+    window.open(data.signedUrl, '_blank');
+  }
+
+  async function removerAnexo(anexo: Anexo) {
+    if (!canEdit) return;
+    if (!confirm(`Excluir o anexo "${anexo.nome_arquivo}"?`)) return;
+    await supabase.storage.from('plano-anexos').remove([anexo.storage_path]);
+    await db.from('plano_anexos').delete().eq('id', anexo.id);
+    toast({ title: 'Anexo removido' });
+    loadData();
+  }
+
+  /* ─── Exportação PDF ─── */
+  function planoToPdfData(p: PlanoAula): PlanoPdfData {
+    const turma = turmas.find(t => t.id === p.turma_id);
+    return {
+      data_aula: p.data_aula,
+      dia_semana: p.dia_semana || diaDaSemana(p.data_aula),
+      turma_nome: p.turmas?.nome || turma?.nome,
+      serie: turma?.serie,
+      disciplina_nome: p.disciplinas?.nome,
+      professor: p.professor,
+      bimestre: p.bimestre,
+      numero_aulas: p.numero_aulas,
+      aulas_previstas: p.aulas_previstas,
+      aprendizagem_essencial: p.aprendizagem_essencial,
+      conteudo: p.conteudo,
+      objetivos: p.objetivos,
+      recursos: p.recursos,
+      desenvolvimento: p.desenvolvimento,
+      material_digital: p.material_digital,
+      avaliacao_aprendizagem: p.avaliacao_aprendizagem,
+      habilidades: p.habilidades,
+      objetivo_geral: p.objetivo_geral,
+      status: p.status,
+      aprovado_por: p.aprovado_por,
+      data_aprovacao: p.data_aprovacao,
+      comentario_aprovacao: p.comentario_aprovacao,
+      ajustes: getPlanoAjustes(p.id).map(a => ({ descricao: a.descricao, created_at: a.created_at })),
+      anexos: getPlanoAnexos(p.id).map(a => ({ nome_arquivo: a.nome_arquivo })),
+    };
+  }
+
+  function exportarPlanoPdf(p: PlanoAula) {
+    const fname = `plano-${p.data_aula}-${(p.disciplinas?.nome || 'plano').replace(/\s+/g, '_')}.pdf`;
+    exportPlanoIndividual(planoToPdfData(p), fname);
+    toast({ title: '📄 PDF gerado!' });
+  }
+
+  function exportarMes(bim: number, mes: number, lista: PlanoAula[]) {
+    if (!lista.length) return;
+    const titulo = `${MESES_NOMES[mes]} — ${bim}º Bimestre`;
+    exportPlanos(lista.map(planoToPdfData), titulo, `planos-${MESES_NOMES[mes].toLowerCase()}-bim${bim}.pdf`);
+    toast({ title: `📄 ${lista.length} planos exportados!` });
+  }
+
+  function exportarBimestre(bim: number, meses: Record<number, PlanoAula[]>) {
+    const lista = Object.keys(meses)
+      .sort((a, b) => Number(a) - Number(b))
+      .flatMap(m => meses[Number(m)]);
+    if (!lista.length) return;
+    exportPlanos(lista.map(planoToPdfData), `${bim}º Bimestre — Planos de Aula`, `planos-bim${bim}.pdf`);
+    toast({ title: `📄 ${lista.length} planos exportados!` });
   }
 
   const formatDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
@@ -340,6 +481,15 @@ export default function PlanoAula() {
             const totalPlanos = Object.values(meses).reduce((sum, arr) => sum + arr.length, 0);
             return (
               <BimestreFolder key={bim} bim={bim} count={totalPlanos} isOpen={openBimestres.has(bim)} onToggle={() => toggleBimestre(bim)}>
+                <div className="flex justify-end px-2 pb-2">
+                  <button
+                    onClick={() => exportarBimestre(bim, meses)}
+                    className="text-xs px-2.5 py-1.5 rounded-md text-primary hover:bg-primary/10 transition-colors flex items-center gap-1.5 border border-primary/20"
+                    title="Exportar bimestre completo em PDF"
+                  >
+                    <FileDown className="w-3.5 h-3.5" /> Exportar Bimestre em PDF
+                  </button>
+                </div>
                 <div className="space-y-1 pl-2">
                   {Object.keys(meses).sort((a, b) => Number(a) - Number(b)).map(monthStr => {
                     const month = Number(monthStr);
@@ -350,17 +500,26 @@ export default function PlanoAula() {
                     return (
                       <div key={mesKey}>
                         {/* Mes folder */}
-                        <button
-                          onClick={() => toggleMes(mesKey)}
-                          className="flex items-center gap-2 w-full px-3 py-2 rounded-lg hover:bg-secondary/60 transition-colors text-left group"
-                        >
-                          {mesAberto ? <FolderOpen className="w-4 h-4 text-primary" /> : <Folder className="w-4 h-4 text-muted-foreground group-hover:text-primary" />}
-                          <span className={cn('text-sm font-medium', mesAberto ? 'text-foreground' : 'text-muted-foreground')}>
-                            {MESES_NOMES[month]}
-                          </span>
-                          <span className="text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-full">{planosDoMes.length}</span>
-                          <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground ml-auto transition-transform', mesAberto && 'rotate-90')} />
-                        </button>
+                        <div className="flex items-center gap-1 w-full px-1 rounded-lg hover:bg-secondary/60 transition-colors">
+                          <button
+                            onClick={() => toggleMes(mesKey)}
+                            className="flex items-center gap-2 flex-1 px-2 py-2 text-left group"
+                          >
+                            {mesAberto ? <FolderOpen className="w-4 h-4 text-primary" /> : <Folder className="w-4 h-4 text-muted-foreground group-hover:text-primary" />}
+                            <span className={cn('text-sm font-medium', mesAberto ? 'text-foreground' : 'text-muted-foreground')}>
+                              {MESES_NOMES[month]}
+                            </span>
+                            <span className="text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-full">{planosDoMes.length}</span>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); exportarMes(bim, month, planosDoMes); }}
+                            className="text-xs px-2 py-1 rounded-md text-primary hover:bg-primary/10 transition-colors flex items-center gap-1"
+                            title="Exportar planos do mês em PDF"
+                          >
+                            <FileDown className="w-3.5 h-3.5" /> PDF
+                          </button>
+                          <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform mr-2', mesAberto && 'rotate-90')} />
+                        </div>
 
                         {/* Planos dentro do mês */}
                         {mesAberto && (
@@ -370,6 +529,7 @@ export default function PlanoAula() {
                               const isExpanded = expandedId === plano.id;
                               const temAjuste = planoTemAjuste(plano.id);
                               const planoAjustes = getPlanoAjustes(plano.id);
+                              const planoAnexos = getPlanoAnexos(plano.id);
 
                               return (
                                 <div key={plano.id} className={cn(
@@ -415,6 +575,15 @@ export default function PlanoAula() {
                                     )}
 
                                     <div className="flex items-center gap-0.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                                      <button className="p-1 rounded hover:bg-secondary relative" onClick={() => setAnexosDialog(plano)} title="Atividades adaptadas (PDF)">
+                                        <Paperclip className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
+                                        {planoAnexos.length > 0 && (
+                                          <span className="absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[9px] font-bold rounded-full w-3.5 h-3.5 flex items-center justify-center">{planoAnexos.length}</span>
+                                        )}
+                                      </button>
+                                      <button className="p-1 rounded hover:bg-secondary" onClick={() => exportarPlanoPdf(plano)} title="Exportar PDF">
+                                        <FileDown className="w-3.5 h-3.5 text-muted-foreground hover:text-primary" />
+                                      </button>
                                       {canEdit && (
                                         <>
                                           <button className="p-1 rounded hover:bg-secondary" onClick={() => setAjusteDialog(plano)} title="Registrar ajuste">
@@ -475,6 +644,25 @@ export default function PlanoAula() {
                                                     {new Date(aj.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })}
                                                   </p>
                                                 </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Anexos PEI */}
+                                      {planoAnexos.length > 0 && (
+                                        <div className="mt-4 border-t border-border pt-3">
+                                          <h4 className="text-xs font-bold text-primary uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                                            <Paperclip className="w-3.5 h-3.5" /> Atividades Adaptadas (PEI)
+                                          </h4>
+                                          <div className="space-y-1.5">
+                                            {planoAnexos.map(ax => (
+                                              <div key={ax.id} className="flex items-center gap-2 bg-primary/5 rounded-lg p-2 border border-primary/10">
+                                                <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                                                <span className="text-sm flex-1 truncate">{ax.nome_arquivo}</span>
+                                                <button onClick={() => abrirAnexo(ax)} className="p-1 rounded hover:bg-primary/10" title="Visualizar"><Eye className="w-3.5 h-3.5 text-primary" /></button>
+                                                <button onClick={() => baixarAnexo(ax)} className="p-1 rounded hover:bg-primary/10" title="Baixar"><Download className="w-3.5 h-3.5 text-primary" /></button>
                                               </div>
                                             ))}
                                           </div>
@@ -543,14 +731,23 @@ export default function PlanoAula() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Data da Aula *</Label>
-                <Input type="date" value={form.data_aula} onChange={e => setForm({ ...form, data_aula: e.target.value })} />
+                <Input
+                  type="date"
+                  value={form.data_aula}
+                  onChange={e => {
+                    const novaData = e.target.value;
+                    setForm({ ...form, data_aula: novaData, dia_semana: novaData ? diaDaSemana(novaData) : '' });
+                  }}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Dia da Semana</Label>
-                <Select value={form.dia_semana} onValueChange={v => setForm({ ...form, dia_semana: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{DIAS_SEMANA.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
-                </Select>
+                <Input
+                  value={form.dia_semana || (form.data_aula ? diaDaSemana(form.data_aula) : '')}
+                  readOnly
+                  className="bg-muted/50 cursor-not-allowed"
+                  placeholder="Selecione a data"
+                />
               </div>
             </div>
 
@@ -632,6 +829,86 @@ export default function PlanoAula() {
             <Button onClick={salvarAjuste} disabled={savingAjuste || !ajusteTexto.trim()} className="bg-warning hover:bg-warning/90 text-warning-foreground">
               <PenLine className="w-4 h-4 mr-1.5" /> Salvar Ajuste
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de anexos (atividades adaptadas - PEI) */}
+      <Dialog open={!!anexosDialog} onOpenChange={() => setAnexosDialog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Paperclip className="w-5 h-5 text-primary" /> Atividades Adaptadas (PEI)
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-xs text-muted-foreground">
+              {anexosDialog?.turmas?.nome} · {anexosDialog?.disciplinas?.nome} · {anexosDialog?.data_aula && formatDate(anexosDialog.data_aula)}
+            </p>
+
+            {anexosDialog && (() => {
+              const lista = getPlanoAnexos(anexosDialog.id);
+              return lista.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-lg">
+                  Nenhuma atividade anexada ainda
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {lista.map(ax => (
+                    <div key={ax.id} className="flex items-center gap-2 bg-secondary/50 rounded-lg p-2.5 border border-border">
+                      <FileText className="w-5 h-5 text-primary flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{ax.nome_arquivo}</p>
+                        {ax.tamanho_bytes && (
+                          <p className="text-xs text-muted-foreground">{(ax.tamanho_bytes / 1024).toFixed(0)} KB</p>
+                        )}
+                      </div>
+                      <button onClick={() => abrirAnexo(ax)} className="p-1.5 rounded hover:bg-primary/10" title="Visualizar">
+                        <Eye className="w-4 h-4 text-primary" />
+                      </button>
+                      <button onClick={() => baixarAnexo(ax)} className="p-1.5 rounded hover:bg-primary/10" title="Baixar">
+                        <Download className="w-4 h-4 text-primary" />
+                      </button>
+                      {canEdit && (
+                        <button onClick={() => removerAnexo(ax)} className="p-1.5 rounded hover:bg-destructive/10" title="Excluir">
+                          <XIcon className="w-4 h-4 text-destructive" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            {canEdit && anexosDialog && (
+              <label className={cn(
+                'flex items-center justify-center gap-2 px-3 py-3 border-2 border-dashed border-primary/30 rounded-lg cursor-pointer hover:bg-primary/5 transition-colors',
+                uploadingAnexo && 'opacity-50 pointer-events-none'
+              )}>
+                <Upload className="w-4 h-4 text-primary" />
+                <span className="text-sm text-primary font-medium">
+                  {uploadingAnexo ? 'Enviando...' : 'Anexar PDF'}
+                </span>
+                <input
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  disabled={uploadingAnexo}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file && anexosDialog) await uploadAnexo(anexosDialog, file);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            )}
+
+            <p className="text-xs text-muted-foreground text-center">
+              Apenas PDF, máximo 10MB. Visível para a coordenação e gestão.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAnexosDialog(null)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
