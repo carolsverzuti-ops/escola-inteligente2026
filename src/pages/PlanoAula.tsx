@@ -94,6 +94,7 @@ const db = supabase as any;
 export default function PlanoAula() {
   const [planos, setPlanos] = useState<PlanoAula[]>([]);
   const [ajustes, setAjustes] = useState<Ajuste[]>([]);
+  const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [turmas, setTurmas] = useState<any[]>([]);
   const [disciplinas, setDisciplinas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -115,6 +116,8 @@ export default function PlanoAula() {
   const [ajusteDialog, setAjusteDialog] = useState<PlanoAula | null>(null);
   const [ajusteTexto, setAjusteTexto] = useState('');
   const [savingAjuste, setSavingAjuste] = useState(false);
+  const [anexosDialog, setAnexosDialog] = useState<PlanoAula | null>(null);
+  const [uploadingAnexo, setUploadingAnexo] = useState(false);
   const { toast } = useToast();
   const { userId, canEdit, canApprove, readOnly } = usePermissions();
   const { profile } = useAuth();
@@ -134,16 +137,18 @@ export default function PlanoAula() {
   }, []);
 
   async function loadData() {
-    const [{ data: p }, { data: t }, { data: d }, { data: a }] = await Promise.all([
+    const [{ data: p }, { data: t }, { data: d }, { data: a }, { data: ax }] = await Promise.all([
       db.from('planos_aula').select('*, turmas(nome), disciplinas(nome, cor)').order('data_aula', { ascending: true }),
       supabase.from('turmas').select('id, nome').order('nome'),
       db.from('disciplinas').select('id, nome, cor').order('nome'),
       db.from('ajustes_plano').select('*').order('created_at', { ascending: false }),
+      db.from('plano_anexos').select('*').order('created_at', { ascending: false }),
     ]);
     setPlanos(p as PlanoAula[] || []);
     setTurmas(t || []);
     setDisciplinas(d || []);
     setAjustes(a as Ajuste[] || []);
+    setAnexos((ax as Anexo[]) || []);
     setLoading(false);
   }
 
