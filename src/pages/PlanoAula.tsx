@@ -71,6 +71,16 @@ interface Ajuste {
   created_at: string;
 }
 
+interface Anexo {
+  id: string;
+  plano_id: string;
+  nome_arquivo: string;
+  storage_path: string;
+  mime_type?: string;
+  tamanho_bytes?: number;
+  created_at: string;
+}
+
 const emptyForm = {
   turma_id: '', disciplina_id: '', bimestre: 1, data_aula: new Date().toISOString().split('T')[0],
   dia_semana: 'Segunda-feira', numero_aulas: 2, aprendizagem_essencial: '', conteudo: '',
