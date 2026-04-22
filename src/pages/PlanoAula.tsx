@@ -810,23 +810,22 @@ export default function PlanoAula() {
                <div className="flex items-center gap-2">
                  <Paperclip className="w-4 h-4 text-primary" />
                  <Label className="text-sm font-semibold text-foreground">Atividade Adaptada (PEI)</Label>
-                 {editingPlano && getPlanoAnexos(editingPlano.id).length > 0 && (
-                   <span className="text-xs px-2 py-0.5 rounded-full bg-success/15 text-success font-medium">
-                     {getPlanoAnexos(editingPlano.id).length} anexo(s)
-                   </span>
-                 )}
+                 {(() => {
+                   const total = (editingPlano ? getPlanoAnexos(editingPlano.id).length : 0) + pendingAnexos.length;
+                   return total > 0 ? (
+                     <span className="text-xs px-2 py-0.5 rounded-full bg-success/15 text-success font-medium">
+                       {total} anexo(s)
+                     </span>
+                   ) : null;
+                 })()}
                </div>
                <p className="text-xs text-muted-foreground">
                  Anexe arquivos PDF com atividades adaptadas para alunos com PEI. A coordenação pode visualizar os anexos.
                </p>
 
-               {!editingPlano ? (
-                 <p className="text-xs italic text-muted-foreground bg-background/60 rounded p-2 border border-border">
-                   💡 Salve o plano primeiro. Após salvar, edite o plano para anexar a atividade adaptada em PDF.
-                 </p>
-               ) : (
-                 <>
-                   {getPlanoAnexos(editingPlano.id).length > 0 && (
+               <>
+                   {/* Anexos já salvos (apenas em edição) */}
+                   {editingPlano && getPlanoAnexos(editingPlano.id).length > 0 && (
                      <div className="space-y-1.5">
                        {getPlanoAnexos(editingPlano.id).map(anexo => (
                          <div key={anexo.id} className="flex items-center gap-2 bg-background rounded p-2 border border-border text-sm">
@@ -847,6 +846,43 @@ export default function PlanoAula() {
                        ))}
                      </div>
                    )}
+                   {/* Arquivos pendentes (selecionados, ainda não enviados) */}
+                   {pendingAnexos.length > 0 && (
+                     <div className="space-y-1.5">
+                       {pendingAnexos.map((file, idx) => (
+                         <div key={idx} className="flex items-center gap-2 bg-background rounded p-2 border border-dashed border-primary/40 text-sm">
+                           <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                           <span className="flex-1 truncate" title={file.name}>
+                             {file.name}
+                             <span className="ml-2 text-[10px] uppercase tracking-wide text-primary font-semibold">aguardando salvar</span>
+                           </span>
+                           <Button
+                             type="button"
+                             size="sm"
+                             variant="ghost"
+                             className="h-7 px-2"
+                             onClick={() => {
+                               const url = URL.createObjectURL(file);
+                               window.open(url, '_blank');
+                             }}
+                             title="Visualizar"
+                           >
+                             <Eye className="w-3.5 h-3.5" />
+                           </Button>
+                           <Button
+                             type="button"
+                             size="sm"
+                             variant="ghost"
+                             className="h-7 px-2 text-destructive hover:text-destructive"
+                             onClick={() => setPendingAnexos(prev => prev.filter((_, i) => i !== idx))}
+                             title="Remover"
+                           >
+                             <XIcon className="w-3.5 h-3.5" />
+                           </Button>
+                         </div>
+                       ))}
+                     </div>
+                   )}
                    {canEdit && (
                      <div>
                        <input
@@ -856,10 +892,20 @@ export default function PlanoAula() {
                          className="hidden"
                          onChange={async (e) => {
                            const file = e.target.files?.[0];
-                           if (file && editingPlano) {
-                             await uploadAnexo(editingPlano, file);
+                           if (!file) return;
+                           if (file.size > 10 * 1024 * 1024) {
+                             toast({ title: 'Arquivo muito grande (máx 10MB)', variant: 'destructive' });
                              e.target.value = '';
+                             return;
                            }
+                           if (editingPlano) {
+                             // Plano já existe → upload imediato
+                             await uploadAnexo(editingPlano, file);
+                           } else {
+                             // Plano novo → segura em memória até salvar
+                             setPendingAnexos(prev => [...prev, file]);
+                           }
+                           e.target.value = '';
                          }}
                          disabled={uploadingAnexo}
                        />
@@ -872,12 +918,20 @@ export default function PlanoAula() {
                          className="w-full border-primary/40 hover:bg-primary/10"
                        >
                          <Upload className="w-4 h-4 mr-1.5" />
-                         {uploadingAnexo ? 'Enviando...' : (getPlanoAnexos(editingPlano.id).length > 0 ? 'Adicionar outro PDF' : 'Adicionar atividade adaptada (PDF)')}
+                         {uploadingAnexo
+                           ? 'Enviando...'
+                           : (((editingPlano ? getPlanoAnexos(editingPlano.id).length : 0) + pendingAnexos.length) > 0
+                               ? 'Adicionar outro PDF'
+                               : 'Anexar PDF da atividade adaptada')}
                        </Button>
+                       {!editingPlano && pendingAnexos.length > 0 && (
+                         <p className="text-[11px] italic text-muted-foreground mt-1.5">
+                           O(s) arquivo(s) será(ão) enviado(s) ao clicar em <b>Salvar Plano</b>.
+                         </p>
+                       )}
                      </div>
                    )}
-                 </>
-               )}
+               </>
              </div>
            </div>
           <DialogFooter>
