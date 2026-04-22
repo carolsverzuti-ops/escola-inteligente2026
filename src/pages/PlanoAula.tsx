@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
   Plus, Edit2, Trash2, Copy, Search, BookOpen, Beaker, CheckCircle, Clock,
-  FolderOpen, Folder, ChevronRight, ChevronDown, FileText, AlertTriangle, PenLine, Eye
+  FolderOpen, Folder, ChevronRight, ChevronDown, FileText, AlertTriangle, PenLine, Eye,
+  Paperclip, Download, X as XIcon, Upload, FileDown
 } from 'lucide-react';
 import { PageHeader, FilterBar, EmptyState, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
@@ -16,8 +17,9 @@ import { cn } from '@/lib/utils';
 import { getDisciplinaDot } from '@/pages/Materias';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/contexts/AuthContext';
+import { exportPlanoIndividual, exportPlanos, diaDaSemana, type PlanoPdfData } from '@/lib/planoPdf';
 
-const DIAS_SEMANA = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira'];
+const DIAS_SEMANA = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
 
 const DISC_BORDER: Record<string, string> = {
   azul: 'border-l-blue-500', roxo: 'border-l-purple-500', verde: 'border-l-green-500',
