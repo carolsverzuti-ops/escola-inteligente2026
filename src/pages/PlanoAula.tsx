@@ -228,6 +228,130 @@ export default function PlanoAula() {
     loadData();
   }
 
+  /* ─── Atividades adaptadas (anexos PDF) ─── */
+  function getPlanoAnexos(planoId: string) {
+    return anexos.filter(a => a.plano_id === planoId);
+  }
+
+  async function uploadAnexo(plano: PlanoAula, file: File) {
+    if (!canEdit || !userId) return;
+    if (file.type !== 'application/pdf') {
+      toast({ title: 'Apenas arquivos PDF', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ title: 'Arquivo muito grande (máx 10MB)', variant: 'destructive' });
+      return;
+    }
+    setUploadingAnexo(true);
+    const ts = Date.now();
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${userId}/${plano.id}/${ts}_${safeName}`;
+    const { error: upErr } = await supabase.storage.from('plano-anexos').upload(path, file, {
+      cacheControl: '3600',
+      contentType: 'application/pdf',
+    });
+    if (upErr) {
+      toast({ title: 'Erro ao enviar', description: upErr.message, variant: 'destructive' });
+      setUploadingAnexo(false);
+      return;
+    }
+    const { error: insErr } = await db.from('plano_anexos').insert({
+      plano_id: plano.id,
+      user_id: userId,
+      nome_arquivo: file.name,
+      storage_path: path,
+      mime_type: file.type,
+      tamanho_bytes: file.size,
+    });
+    if (insErr) {
+      await supabase.storage.from('plano-anexos').remove([path]);
+      toast({ title: 'Erro ao salvar registro', description: insErr.message, variant: 'destructive' });
+    } else {
+      toast({ title: '📎 Atividade adaptada anexada!' });
+      await loadData();
+    }
+    setUploadingAnexo(false);
+  }
+
+  async function abrirAnexo(anexo: Anexo) {
+    const { data, error } = await supabase.storage
+      .from('plano-anexos')
+      .createSignedUrl(anexo.storage_path, 60 * 10);
+    if (error || !data) return toast({ title: 'Erro ao abrir', variant: 'destructive' });
+    window.open(data.signedUrl, '_blank');
+  }
+
+  async function baixarAnexo(anexo: Anexo) {
+    const { data, error } = await supabase.storage
+      .from('plano-anexos')
+      .createSignedUrl(anexo.storage_path, 60 * 10, { download: anexo.nome_arquivo });
+    if (error || !data) return toast({ title: 'Erro ao baixar', variant: 'destructive' });
+    window.open(data.signedUrl, '_blank');
+  }
+
+  async function removerAnexo(anexo: Anexo) {
+    if (!canEdit) return;
+    if (!confirm(`Excluir o anexo "${anexo.nome_arquivo}"?`)) return;
+    await supabase.storage.from('plano-anexos').remove([anexo.storage_path]);
+    await db.from('plano_anexos').delete().eq('id', anexo.id);
+    toast({ title: 'Anexo removido' });
+    loadData();
+  }
+
+  /* ─── Exportação PDF ─── */
+  function planoToPdfData(p: PlanoAula): PlanoPdfData {
+    const turma = turmas.find(t => t.id === p.turma_id);
+    return {
+      data_aula: p.data_aula,
+      dia_semana: p.dia_semana || diaDaSemana(p.data_aula),
+      turma_nome: p.turmas?.nome || turma?.nome,
+      serie: turma?.serie,
+      disciplina_nome: p.disciplinas?.nome,
+      professor: p.professor,
+      bimestre: p.bimestre,
+      numero_aulas: p.numero_aulas,
+      aulas_previstas: p.aulas_previstas,
+      aprendizagem_essencial: p.aprendizagem_essencial,
+      conteudo: p.conteudo,
+      objetivos: p.objetivos,
+      recursos: p.recursos,
+      desenvolvimento: p.desenvolvimento,
+      material_digital: p.material_digital,
+      avaliacao_aprendizagem: p.avaliacao_aprendizagem,
+      habilidades: p.habilidades,
+      objetivo_geral: p.objetivo_geral,
+      status: p.status,
+      aprovado_por: p.aprovado_por,
+      data_aprovacao: p.data_aprovacao,
+      comentario_aprovacao: p.comentario_aprovacao,
+      ajustes: getPlanoAjustes(p.id).map(a => ({ descricao: a.descricao, created_at: a.created_at })),
+      anexos: getPlanoAnexos(p.id).map(a => ({ nome_arquivo: a.nome_arquivo })),
+    };
+  }
+
+  function exportarPlanoPdf(p: PlanoAula) {
+    const fname = `plano-${p.data_aula}-${(p.disciplinas?.nome || 'plano').replace(/\s+/g, '_')}.pdf`;
+    exportPlanoIndividual(planoToPdfData(p), fname);
+    toast({ title: '📄 PDF gerado!' });
+  }
+
+  function exportarMes(bim: number, mes: number, lista: PlanoAula[]) {
+    if (!lista.length) return;
+    const titulo = `${MESES_NOMES[mes]} — ${bim}º Bimestre`;
+    exportPlanos(lista.map(planoToPdfData), titulo, `planos-${MESES_NOMES[mes].toLowerCase()}-bim${bim}.pdf`);
+    toast({ title: `📄 ${lista.length} planos exportados!` });
+  }
+
+  function exportarBimestre(bim: number, meses: Record<number, PlanoAula[]>) {
+    const lista = Object.keys(meses)
+      .sort((a, b) => Number(a) - Number(b))
+      .flatMap(m => meses[Number(m)]);
+    if (!lista.length) return;
+    exportPlanos(lista.map(planoToPdfData), `${bim}º Bimestre — Planos de Aula`, `planos-bim${bim}.pdf`);
+    toast({ title: `📄 ${lista.length} planos exportados!` });
+  }
+
   const formatDate = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
 
   const filtered = planos.filter(p => {
