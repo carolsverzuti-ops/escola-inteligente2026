@@ -684,14 +684,23 @@ export default function PlanoAula() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Data da Aula *</Label>
-                <Input type="date" value={form.data_aula} onChange={e => setForm({ ...form, data_aula: e.target.value })} />
+                <Input
+                  type="date"
+                  value={form.data_aula}
+                  onChange={e => {
+                    const novaData = e.target.value;
+                    setForm({ ...form, data_aula: novaData, dia_semana: novaData ? diaDaSemana(novaData) : '' });
+                  }}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label>Dia da Semana</Label>
-                <Select value={form.dia_semana} onValueChange={v => setForm({ ...form, dia_semana: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{DIAS_SEMANA.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
-                </Select>
+                <Input
+                  value={form.dia_semana || (form.data_aula ? diaDaSemana(form.data_aula) : '')}
+                  readOnly
+                  className="bg-muted/50 cursor-not-allowed"
+                  placeholder="Selecione a data"
+                />
               </div>
             </div>
 
