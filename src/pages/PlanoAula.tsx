@@ -481,6 +481,15 @@ export default function PlanoAula() {
             const totalPlanos = Object.values(meses).reduce((sum, arr) => sum + arr.length, 0);
             return (
               <BimestreFolder key={bim} bim={bim} count={totalPlanos} isOpen={openBimestres.has(bim)} onToggle={() => toggleBimestre(bim)}>
+                <div className="flex justify-end px-2 pb-2">
+                  <button
+                    onClick={() => exportarBimestre(bim, meses)}
+                    className="text-xs px-2.5 py-1.5 rounded-md text-primary hover:bg-primary/10 transition-colors flex items-center gap-1.5 border border-primary/20"
+                    title="Exportar bimestre completo em PDF"
+                  >
+                    <FileDown className="w-3.5 h-3.5" /> Exportar Bimestre em PDF
+                  </button>
+                </div>
                 <div className="space-y-1 pl-2">
                   {Object.keys(meses).sort((a, b) => Number(a) - Number(b)).map(monthStr => {
                     const month = Number(monthStr);
