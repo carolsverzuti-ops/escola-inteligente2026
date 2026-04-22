@@ -491,17 +491,26 @@ export default function PlanoAula() {
                     return (
                       <div key={mesKey}>
                         {/* Mes folder */}
-                        <button
-                          onClick={() => toggleMes(mesKey)}
-                          className="flex items-center gap-2 w-full px-3 py-2 rounded-lg hover:bg-secondary/60 transition-colors text-left group"
-                        >
-                          {mesAberto ? <FolderOpen className="w-4 h-4 text-primary" /> : <Folder className="w-4 h-4 text-muted-foreground group-hover:text-primary" />}
-                          <span className={cn('text-sm font-medium', mesAberto ? 'text-foreground' : 'text-muted-foreground')}>
-                            {MESES_NOMES[month]}
-                          </span>
-                          <span className="text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-full">{planosDoMes.length}</span>
-                          <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground ml-auto transition-transform', mesAberto && 'rotate-90')} />
-                        </button>
+                        <div className="flex items-center gap-1 w-full px-1 rounded-lg hover:bg-secondary/60 transition-colors">
+                          <button
+                            onClick={() => toggleMes(mesKey)}
+                            className="flex items-center gap-2 flex-1 px-2 py-2 text-left group"
+                          >
+                            {mesAberto ? <FolderOpen className="w-4 h-4 text-primary" /> : <Folder className="w-4 h-4 text-muted-foreground group-hover:text-primary" />}
+                            <span className={cn('text-sm font-medium', mesAberto ? 'text-foreground' : 'text-muted-foreground')}>
+                              {MESES_NOMES[month]}
+                            </span>
+                            <span className="text-xs text-muted-foreground bg-secondary px-1.5 py-0.5 rounded-full">{planosDoMes.length}</span>
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); exportarMes(bim, month, planosDoMes); }}
+                            className="text-xs px-2 py-1 rounded-md text-primary hover:bg-primary/10 transition-colors flex items-center gap-1"
+                            title="Exportar planos do mês em PDF"
+                          >
+                            <FileDown className="w-3.5 h-3.5" /> PDF
+                          </button>
+                          <ChevronRight className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform mr-2', mesAberto && 'rotate-90')} />
+                        </div>
 
                         {/* Planos dentro do mês */}
                         {mesAberto && (
