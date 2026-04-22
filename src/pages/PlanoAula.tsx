@@ -157,11 +157,13 @@ export default function PlanoAula() {
   function openNew() {
     setEditingPlano(null);
     setForm({ ...emptyForm, tipo: tipoPlano });
+    setPendingAnexos([]);
     setDialogOpen(true);
   }
 
   function openEdit(p: PlanoAula) {
     setEditingPlano(p);
+    setPendingAnexos([]);
     setForm({
       turma_id: p.turma_id, disciplina_id: p.disciplina_id || '', bimestre: p.bimestre,
       data_aula: p.data_aula, dia_semana: p.dia_semana || '', numero_aulas: p.numero_aulas || 2,
