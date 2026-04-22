@@ -649,6 +649,25 @@ export default function PlanoAula() {
                                           </div>
                                         </div>
                                       )}
+
+                                      {/* Anexos PEI */}
+                                      {planoAnexos.length > 0 && (
+                                        <div className="mt-4 border-t border-border pt-3">
+                                          <h4 className="text-xs font-bold text-primary uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                                            <Paperclip className="w-3.5 h-3.5" /> Atividades Adaptadas (PEI)
+                                          </h4>
+                                          <div className="space-y-1.5">
+                                            {planoAnexos.map(ax => (
+                                              <div key={ax.id} className="flex items-center gap-2 bg-primary/5 rounded-lg p-2 border border-primary/10">
+                                                <FileText className="w-4 h-4 text-primary flex-shrink-0" />
+                                                <span className="text-sm flex-1 truncate">{ax.nome_arquivo}</span>
+                                                <button onClick={() => abrirAnexo(ax)} className="p-1 rounded hover:bg-primary/10" title="Visualizar"><Eye className="w-3.5 h-3.5 text-primary" /></button>
+                                                <button onClick={() => baixarAnexo(ax)} className="p-1 rounded hover:bg-primary/10" title="Baixar"><Download className="w-3.5 h-3.5 text-primary" /></button>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
