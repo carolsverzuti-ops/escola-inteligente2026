@@ -188,13 +188,26 @@ export default function PlanoAula() {
     if (editingPlano) {
       await db.from('planos_aula').update(payload).eq('id', editingPlano.id);
       toast({ title: 'Plano atualizado!' });
+      setSaving(false);
+      setDialogOpen(false);
+      loadData();
     } else {
-      await db.from('planos_aula').insert({ ...payload, user_id: userId });
-      toast({ title: 'Plano cadastrado!' });
+      const { data: novo } = await db
+        .from('planos_aula')
+        .insert({ ...payload, user_id: userId })
+        .select('*, turmas(nome), disciplinas(nome, cor)')
+        .single();
+      toast({ title: 'Plano cadastrado! Agora você pode anexar a atividade adaptada.' });
+      setSaving(false);
+      await loadData();
+      // Mantém o dialog aberto em modo edição para permitir anexar a Atividade Adaptada
+      if (novo) {
+        setEditingPlano(novo as PlanoAula);
+      } else {
+        setDialogOpen(false);
+      }
+      return;
     }
-    setSaving(false);
-    setDialogOpen(false);
-    loadData();
   }
 
   async function remove(id: string) {
