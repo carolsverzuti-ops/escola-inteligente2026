@@ -118,6 +118,8 @@ export default function PlanoAula() {
   const [savingAjuste, setSavingAjuste] = useState(false);
   const [anexosDialog, setAnexosDialog] = useState<PlanoAula | null>(null);
   const [uploadingAnexo, setUploadingAnexo] = useState(false);
+  // Arquivos selecionados antes do plano existir (modo "novo plano")
+  const [pendingAnexos, setPendingAnexos] = useState<File[]>([]);
   const { toast } = useToast();
   const { userId, canEdit, canApprove, readOnly } = usePermissions();
   const { profile } = useAuth();
