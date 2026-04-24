@@ -525,7 +525,24 @@ export default function Notas() {
     });
 
     setPasteCount(count);
-    toast({ title: `${count} notas coladas com sucesso!`, description: 'As notas foram distribuídas automaticamente.' });
+    // Aviso de quantidade copiada x alunos visíveis (apenas para coluna única)
+    const linhasColadas = rows.length;
+    const alunosRestantes = maxRow - startRow;
+    const isColunaUnica = !rows.some(r => r.includes('\t'));
+    let aviso = '';
+    if (isColunaUnica) {
+      if (linhasColadas > alunosRestantes) {
+        aviso = ` ⚠ ${linhasColadas - alunosRestantes} nota(s) excederam a lista e foram ignoradas.`;
+      } else if (linhasColadas < alunosRestantes && startRow === 0) {
+        aviso = ` ℹ Você colou ${linhasColadas} nota(s) para ${alunosRestantes} aluno(s).`;
+      }
+    }
+    if (invalidos > 0) aviso += ` ${invalidos} valor(es) inválido(s) ignorado(s).`;
+    if (foraDoLimite > 0 && !isColunaUnica) aviso += ` ${foraDoLimite} célula(s) fora do limite.`;
+    toast({
+      title: `${count} nota(s) colada(s) com sucesso!`,
+      description: (sobrescritas > 0 ? `${sobrescritas} nota(s) substituída(s).` : 'Notas distribuídas em ordem.') + aviso,
+    });
   }, [persistNota, toast]);
 
   async function adicionarTipoAvaliacao() {
