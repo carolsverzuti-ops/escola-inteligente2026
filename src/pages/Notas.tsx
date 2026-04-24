@@ -117,13 +117,15 @@ function ColunaTipoEditor({
 }) {
   const [open, setOpen] = useState(false);
   const [nome, setNome] = useState(tipo.nome);
-  const [peso, setPeso] = useState(tipo.peso);
+  const [pesoStr, setPesoStr] = useState(String(tipo.peso).replace('.', ','));
 
-  useEffect(() => { setNome(tipo.nome); setPeso(tipo.peso); }, [tipo]);
+  useEffect(() => { setNome(tipo.nome); setPesoStr(String(tipo.peso).replace('.', ',')); }, [tipo]);
 
   const salvar = () => {
     if (!nome.trim()) return;
-    onUpdate(tipo.id, nome.trim(), peso);
+    const pesoNum = parsePeso(pesoStr);
+    if (pesoNum === null) return;
+    onUpdate(tipo.id, nome.trim(), pesoNum);
     setOpen(false);
   };
 
@@ -147,7 +149,16 @@ function ColunaTipoEditor({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Peso</Label>
-              <Input type="number" min="0.1" max="10" step="0.1" value={peso} onChange={e => setPeso(parseFloat(e.target.value) || 1)} className="h-8 text-sm" />
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={pesoStr}
+                onChange={e => setPesoStr(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); salvar(); } }}
+                placeholder="Ex: 1, 2, 0,5 ou 25%"
+                className="h-8 text-sm"
+              />
+              <p className="text-[10px] text-muted-foreground">Aceita números (1, 2, 0,5) ou porcentagem (25%, 40%).</p>
             </div>
             <div className="flex items-center justify-between pt-1">
               <div className="flex gap-1">
