@@ -464,6 +464,9 @@ export default function Notas() {
     const maxRow = alunosRef.current.length;
     const maxCol = tiposRef.current.length;
     let count = 0;
+    let invalidos = 0;
+    let foraDoLimite = 0;
+    let sobrescritas = 0;
     const updates: { rowIdx: number; colIdx: number; nota: number | null }[] = [];
 
     rows.forEach((rowStr, ri) => {
@@ -471,14 +474,34 @@ export default function Notas() {
       cells.forEach((cellStr, ci) => {
         const r = startRow + ri;
         const c = startCol + ci;
-        if (r >= maxRow || c >= maxCol) return;
-        const nota = parseNota(cellStr);
+        if (r >= maxRow || c >= maxCol) { foraDoLimite++; return; }
+        const trimmed = cellStr.trim();
+        if (trimmed === '') return; // célula vazia: ignora, NÃO apaga existente
+        const nota = parseNota(trimmed);
+        if (nota === null && trimmed !== '—' && trimmed !== '-') { invalidos++; return; }
+        const aluno = alunosRef.current[r];
+        const tipo = tiposRef.current[c];
+        if (aluno && tipo) {
+          const atual = aluno.notas[tipo.id];
+          if (atual !== null && atual !== undefined && atual !== nota) sobrescritas++;
+        }
         updates.push({ rowIdx: r, colIdx: c, nota });
         count++;
       });
     });
 
-    if (updates.length === 0) return;
+    if (updates.length === 0) {
+      toast({ title: 'Nada para colar', description: invalidos > 0 ? `${invalidos} valor(es) inválido(s).` : 'Verifique o conteúdo copiado.', variant: 'destructive' });
+      return;
+    }
+
+    // Confirmação ao sobrescrever notas existentes
+    if (sobrescritas > 0) {
+      const ok = window.confirm(
+        `Esta colagem irá substituir ${sobrescritas} nota(s) já lançada(s).\n\nDeseja continuar?\n\n(As demais avaliações e notas de outros alunos NÃO serão alteradas.)`
+      );
+      if (!ok) return;
+    }
 
     // Apply all at once
     setAlunosNotas(prev => {
