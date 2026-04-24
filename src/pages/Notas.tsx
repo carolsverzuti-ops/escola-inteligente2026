@@ -93,6 +93,18 @@ function parseNota(raw: string): number | null {
   return Math.min(10, Math.max(0, Math.round(val * 10) / 10));
 }
 
+/** Aceita "1", "0,5", "0.5", "25%", "40 %", "2,5" etc. Retorna número (sem clamp) ou null. */
+function parsePeso(raw: string): number | null {
+  let s = raw.trim();
+  if (!s) return null;
+  const isPct = s.includes('%');
+  s = s.replace('%', '').replace(',', '.').trim();
+  const val = parseFloat(s);
+  if (isNaN(val) || val <= 0) return null;
+  const result = isPct ? val / 100 : val;
+  return Math.round(result * 1000) / 1000; // 3 casas
+}
+
 /* ─── Inline column editor popover ─── */
 function ColunaTipoEditor({
   tipo, cor, index, total,
