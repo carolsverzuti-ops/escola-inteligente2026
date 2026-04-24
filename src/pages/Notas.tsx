@@ -187,17 +187,30 @@ function ColunaTipoEditor({
 
 /* ─── Spreadsheet Cell ─── */
 function SpreadsheetCell({
-  value, isFocused, onFocus, onChange, onKeyDown, onPaste, inputRef, saving,
+  value, isFocused, onFocus, onCommit, onKeyDown, onPaste, inputRef, saving,
 }: {
   value: number | null;
   isFocused: boolean;
   onFocus: () => void;
-  onChange: (val: string) => void;
+  onCommit: (val: string) => void;
   onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
   onPaste: (e: ClipboardEvent<HTMLInputElement>) => void;
   inputRef: (el: HTMLInputElement | null) => void;
   saving: boolean;
 }) {
+  // Buffer local: permite digitar "7," ou "10" sem que o React force re-render
+  // descartando caracteres parciais. Persiste no blur ou Enter/Tab/Setas.
+  const [draft, setDraft] = React.useState<string>(value !== null && value !== undefined ? String(value).replace('.', ',') : '');
+
+  React.useEffect(() => {
+    setDraft(value !== null && value !== undefined ? String(value).replace('.', ',') : '');
+  }, [value]);
+
+  const commit = () => {
+    const current = value !== null && value !== undefined ? String(value).replace('.', ',') : '';
+    if (draft !== current) onCommit(draft);
+  };
+
   return (
     <td className={cn(
       'px-0 py-0 text-center border border-border/30 relative transition-all',
@@ -207,10 +220,15 @@ function SpreadsheetCell({
         ref={inputRef}
         type="text"
         inputMode="decimal"
-        value={value !== null && value !== undefined ? value : ''}
-        onChange={e => onChange(e.target.value)}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
         onFocus={onFocus}
-        onKeyDown={onKeyDown}
+        onKeyDown={(e) => {
+          // Persistir antes de navegar
+          if (['Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(e.key)) commit();
+          onKeyDown(e);
+        }}
         onPaste={onPaste}
         className={cn(
           'w-full h-9 text-center text-sm font-semibold bg-transparent focus:outline-none focus:bg-background transition-colors',
