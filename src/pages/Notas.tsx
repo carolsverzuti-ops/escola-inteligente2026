@@ -780,7 +780,15 @@ export default function Notas() {
             </div>
             <div className="space-y-1.5">
               <Label>Peso (para média ponderada)</Label>
-              <Input type="number" min="0.1" max="10" step="0.1" value={formTipo.peso} onChange={e => setFormTipo({ ...formTipo, peso: parseFloat(e.target.value) })} />
+              <Input
+                type="text"
+                inputMode="decimal"
+                placeholder="Ex: 1, 2, 0,5 ou 25%"
+                value={formTipo.pesoStr}
+                onChange={e => setFormTipo({ ...formTipo, pesoStr: e.target.value })}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarTipoAvaliacao(); } }}
+              />
+              <p className="text-[11px] text-muted-foreground">Aceita números (1, 2, 0,5) ou porcentagem (25%, 40%).</p>
             </div>
           </div>
           <DialogFooter>
