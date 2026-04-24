@@ -234,7 +234,7 @@ export default function Notas() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [dialogTipo, setDialogTipo] = useState(false);
-  const [formTipo, setFormTipo] = useState({ nome: '', peso: 1.0 });
+  const [formTipo, setFormTipo] = useState<{ nome: string; pesoStr: string }>({ nome: '', pesoStr: '1' });
   const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
   const [pasteCount, setPasteCount] = useState(0);
   const { toast } = useToast();
@@ -488,14 +488,19 @@ export default function Notas() {
   }, [persistNota, toast]);
 
   async function adicionarTipoAvaliacao() {
-    if (!formTipo.nome || !canEdit || !userId) return;
+    if (!formTipo.nome.trim() || !canEdit || !userId) return;
+    const peso = parsePeso(formTipo.pesoStr);
+    if (peso === null) {
+      toast({ title: 'Peso inválido', description: 'Digite um número (ex: 1, 2, 0,5) ou porcentagem (25%).', variant: 'destructive' });
+      return;
+    }
     await (supabase as any).from('tipos_avaliacao').insert({
-      nome: formTipo.nome, peso: formTipo.peso, bimestre: parseInt(filterBimestre),
+      nome: formTipo.nome.trim(), peso, bimestre: parseInt(filterBimestre),
       disciplina_id: filterDisciplina, turma_id: filterTurma, ordem: tiposAvaliacao.length + 1,
       user_id: userId,
     });
     setDialogTipo(false);
-    setFormTipo({ nome: '', peso: 1.0 });
+    setFormTipo({ nome: '', pesoStr: '1' });
     loadNotas();
     toast({ title: 'Avaliação adicionada!' });
   }
