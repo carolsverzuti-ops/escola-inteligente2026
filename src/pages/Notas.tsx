@@ -93,6 +93,18 @@ function parseNota(raw: string): number | null {
   return Math.min(10, Math.max(0, Math.round(val * 10) / 10));
 }
 
+/** Aceita "1", "0,5", "0.5", "25%", "40 %", "2,5" etc. Retorna número (sem clamp) ou null. */
+function parsePeso(raw: string): number | null {
+  let s = raw.trim();
+  if (!s) return null;
+  const isPct = s.includes('%');
+  s = s.replace('%', '').replace(',', '.').trim();
+  const val = parseFloat(s);
+  if (isNaN(val) || val <= 0) return null;
+  const result = isPct ? val / 100 : val;
+  return Math.round(result * 1000) / 1000; // 3 casas
+}
+
 /* ─── Inline column editor popover ─── */
 function ColunaTipoEditor({
   tipo, cor, index, total,
@@ -105,13 +117,15 @@ function ColunaTipoEditor({
 }) {
   const [open, setOpen] = useState(false);
   const [nome, setNome] = useState(tipo.nome);
-  const [peso, setPeso] = useState(tipo.peso);
+  const [pesoStr, setPesoStr] = useState(String(tipo.peso).replace('.', ','));
 
-  useEffect(() => { setNome(tipo.nome); setPeso(tipo.peso); }, [tipo]);
+  useEffect(() => { setNome(tipo.nome); setPesoStr(String(tipo.peso).replace('.', ',')); }, [tipo]);
 
   const salvar = () => {
     if (!nome.trim()) return;
-    onUpdate(tipo.id, nome.trim(), peso);
+    const pesoNum = parsePeso(pesoStr);
+    if (pesoNum === null) return;
+    onUpdate(tipo.id, nome.trim(), pesoNum);
     setOpen(false);
   };
 
@@ -135,7 +149,16 @@ function ColunaTipoEditor({
             </div>
             <div className="space-y-1">
               <Label className="text-xs">Peso</Label>
-              <Input type="number" min="0.1" max="10" step="0.1" value={peso} onChange={e => setPeso(parseFloat(e.target.value) || 1)} className="h-8 text-sm" />
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={pesoStr}
+                onChange={e => setPesoStr(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); salvar(); } }}
+                placeholder="Ex: 1, 2, 0,5 ou 25%"
+                className="h-8 text-sm"
+              />
+              <p className="text-[10px] text-muted-foreground">Aceita números (1, 2, 0,5) ou porcentagem (25%, 40%).</p>
             </div>
             <div className="flex items-center justify-between pt-1">
               <div className="flex gap-1">
@@ -164,17 +187,30 @@ function ColunaTipoEditor({
 
 /* ─── Spreadsheet Cell ─── */
 function SpreadsheetCell({
-  value, isFocused, onFocus, onChange, onKeyDown, onPaste, inputRef, saving,
+  value, isFocused, onFocus, onCommit, onKeyDown, onPaste, inputRef, saving,
 }: {
   value: number | null;
   isFocused: boolean;
   onFocus: () => void;
-  onChange: (val: string) => void;
+  onCommit: (val: string) => void;
   onKeyDown: (e: KeyboardEvent<HTMLInputElement>) => void;
   onPaste: (e: ClipboardEvent<HTMLInputElement>) => void;
   inputRef: (el: HTMLInputElement | null) => void;
   saving: boolean;
 }) {
+  // Buffer local: permite digitar "7," ou "10" sem que o React force re-render
+  // descartando caracteres parciais. Persiste no blur ou Enter/Tab/Setas.
+  const [draft, setDraft] = React.useState<string>(value !== null && value !== undefined ? String(value).replace('.', ',') : '');
+
+  React.useEffect(() => {
+    setDraft(value !== null && value !== undefined ? String(value).replace('.', ',') : '');
+  }, [value]);
+
+  const commit = () => {
+    const current = value !== null && value !== undefined ? String(value).replace('.', ',') : '';
+    if (draft !== current) onCommit(draft);
+  };
+
   return (
     <td className={cn(
       'px-0 py-0 text-center border border-border/30 relative transition-all',
@@ -184,10 +220,15 @@ function SpreadsheetCell({
         ref={inputRef}
         type="text"
         inputMode="decimal"
-        value={value !== null && value !== undefined ? value : ''}
-        onChange={e => onChange(e.target.value)}
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
         onFocus={onFocus}
-        onKeyDown={onKeyDown}
+        onKeyDown={(e) => {
+          // Persistir antes de navegar
+          if (['Enter', 'Tab', 'ArrowUp', 'ArrowDown'].includes(e.key)) commit();
+          onKeyDown(e);
+        }}
         onPaste={onPaste}
         className={cn(
           'w-full h-9 text-center text-sm font-semibold bg-transparent focus:outline-none focus:bg-background transition-colors',
@@ -211,7 +252,7 @@ export default function Notas() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [dialogTipo, setDialogTipo] = useState(false);
-  const [formTipo, setFormTipo] = useState({ nome: '', peso: 1.0 });
+  const [formTipo, setFormTipo] = useState<{ nome: string; pesoStr: string }>({ nome: '', pesoStr: '1' });
   const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
   const [pasteCount, setPasteCount] = useState(0);
   const { toast } = useToast();
@@ -423,6 +464,9 @@ export default function Notas() {
     const maxRow = alunosRef.current.length;
     const maxCol = tiposRef.current.length;
     let count = 0;
+    let invalidos = 0;
+    let foraDoLimite = 0;
+    let sobrescritas = 0;
     const updates: { rowIdx: number; colIdx: number; nota: number | null }[] = [];
 
     rows.forEach((rowStr, ri) => {
@@ -430,14 +474,34 @@ export default function Notas() {
       cells.forEach((cellStr, ci) => {
         const r = startRow + ri;
         const c = startCol + ci;
-        if (r >= maxRow || c >= maxCol) return;
-        const nota = parseNota(cellStr);
+        if (r >= maxRow || c >= maxCol) { foraDoLimite++; return; }
+        const trimmed = cellStr.trim();
+        if (trimmed === '') return; // célula vazia: ignora, NÃO apaga existente
+        const nota = parseNota(trimmed);
+        if (nota === null && trimmed !== '—' && trimmed !== '-') { invalidos++; return; }
+        const aluno = alunosRef.current[r];
+        const tipo = tiposRef.current[c];
+        if (aluno && tipo) {
+          const atual = aluno.notas[tipo.id];
+          if (atual !== null && atual !== undefined && atual !== nota) sobrescritas++;
+        }
         updates.push({ rowIdx: r, colIdx: c, nota });
         count++;
       });
     });
 
-    if (updates.length === 0) return;
+    if (updates.length === 0) {
+      toast({ title: 'Nada para colar', description: invalidos > 0 ? `${invalidos} valor(es) inválido(s).` : 'Verifique o conteúdo copiado.', variant: 'destructive' });
+      return;
+    }
+
+    // Confirmação ao sobrescrever notas existentes
+    if (sobrescritas > 0) {
+      const ok = window.confirm(
+        `Esta colagem irá substituir ${sobrescritas} nota(s) já lançada(s).\n\nDeseja continuar?\n\n(As demais avaliações e notas de outros alunos NÃO serão alteradas.)`
+      );
+      if (!ok) return;
+    }
 
     // Apply all at once
     setAlunosNotas(prev => {
@@ -461,18 +525,40 @@ export default function Notas() {
     });
 
     setPasteCount(count);
-    toast({ title: `${count} notas coladas com sucesso!`, description: 'As notas foram distribuídas automaticamente.' });
+    // Aviso de quantidade copiada x alunos visíveis (apenas para coluna única)
+    const linhasColadas = rows.length;
+    const alunosRestantes = maxRow - startRow;
+    const isColunaUnica = !rows.some(r => r.includes('\t'));
+    let aviso = '';
+    if (isColunaUnica) {
+      if (linhasColadas > alunosRestantes) {
+        aviso = ` ⚠ ${linhasColadas - alunosRestantes} nota(s) excederam a lista e foram ignoradas.`;
+      } else if (linhasColadas < alunosRestantes && startRow === 0) {
+        aviso = ` ℹ Você colou ${linhasColadas} nota(s) para ${alunosRestantes} aluno(s).`;
+      }
+    }
+    if (invalidos > 0) aviso += ` ${invalidos} valor(es) inválido(s) ignorado(s).`;
+    if (foraDoLimite > 0 && !isColunaUnica) aviso += ` ${foraDoLimite} célula(s) fora do limite.`;
+    toast({
+      title: `${count} nota(s) colada(s) com sucesso!`,
+      description: (sobrescritas > 0 ? `${sobrescritas} nota(s) substituída(s).` : 'Notas distribuídas em ordem.') + aviso,
+    });
   }, [persistNota, toast]);
 
   async function adicionarTipoAvaliacao() {
-    if (!formTipo.nome || !canEdit || !userId) return;
+    if (!formTipo.nome.trim() || !canEdit || !userId) return;
+    const peso = parsePeso(formTipo.pesoStr);
+    if (peso === null) {
+      toast({ title: 'Peso inválido', description: 'Digite um número (ex: 1, 2, 0,5) ou porcentagem (25%).', variant: 'destructive' });
+      return;
+    }
     await (supabase as any).from('tipos_avaliacao').insert({
-      nome: formTipo.nome, peso: formTipo.peso, bimestre: parseInt(filterBimestre),
+      nome: formTipo.nome.trim(), peso, bimestre: parseInt(filterBimestre),
       disciplina_id: filterDisciplina, turma_id: filterTurma, ordem: tiposAvaliacao.length + 1,
       user_id: userId,
     });
     setDialogTipo(false);
-    setFormTipo({ nome: '', peso: 1.0 });
+    setFormTipo({ nome: '', pesoStr: '1' });
     loadNotas();
     toast({ title: 'Avaliação adicionada!' });
   }
@@ -695,7 +781,7 @@ export default function Notas() {
                             value={aluno.notas[tipo.id] ?? null}
                             isFocused={focusCell?.row === rowIdx && focusCell?.col === colIdx}
                             onFocus={() => setFocusCell({ row: rowIdx, col: colIdx })}
-                            onChange={(val) => canEdit && handleCellChange(rowIdx, colIdx, val)}
+                            onCommit={(val) => canEdit && handleCellChange(rowIdx, colIdx, val)}
                             onKeyDown={(e) => handleCellKeyDown(e, rowIdx, colIdx)}
                             onPaste={(e) => canEdit && handlePaste(e, rowIdx, colIdx)}
                             inputRef={setCellRef(rowIdx, colIdx)}
@@ -752,7 +838,15 @@ export default function Notas() {
             </div>
             <div className="space-y-1.5">
               <Label>Peso (para média ponderada)</Label>
-              <Input type="number" min="0.1" max="10" step="0.1" value={formTipo.peso} onChange={e => setFormTipo({ ...formTipo, peso: parseFloat(e.target.value) })} />
+              <Input
+                type="text"
+                inputMode="decimal"
+                placeholder="Ex: 1, 2, 0,5 ou 25%"
+                value={formTipo.pesoStr}
+                onChange={e => setFormTipo({ ...formTipo, pesoStr: e.target.value })}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarTipoAvaliacao(); } }}
+              />
+              <p className="text-[11px] text-muted-foreground">Aceita números (1, 2, 0,5) ou porcentagem (25%, 40%).</p>
             </div>
           </div>
           <DialogFooter>
