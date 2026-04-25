@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, KeyboardEvent, ClipboardEvent } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Plus, Trash2, Download, AlertCircle, FileSpreadsheet, Pencil, ChevronLeft, ChevronRight, Check, Clipboard, Info, Eye } from 'lucide-react';
+import { Plus, Trash2, Download, AlertCircle, FileSpreadsheet, Pencil, ChevronLeft, ChevronRight, Check, Clipboard, Info, Eye, Settings, RotateCcw } from 'lucide-react';
 import { PageHeader, FilterBar, BadgeSituacao, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getDisciplinaDot } from '@/pages/Materias';
@@ -30,7 +31,41 @@ interface AlunoNota {
   notas: Record<string, number | null>;
   media: number | null;
   situacao: string;
+  notaArredondada: number | null;
+  arredondadaManual: boolean;
 }
+
+type RoundingMode = 'none' | 'decimal' | 'half' | 'integer';
+
+const ROUNDING_LABELS: Record<RoundingMode, string> = {
+  none: 'Sem arredondamento',
+  decimal: '1 casa decimal (ex: 6,75 → 6,8)',
+  half: 'Meio ponto (ex: 6,75 → 7,0 / 6,3 → 6,5)',
+  integer: 'Número inteiro (ex: 6,75 → 7)',
+};
+
+function arredondarMedia(media: number | null, mode: RoundingMode): number | null {
+  if (media === null || media === undefined) return null;
+  switch (mode) {
+    case 'none':
+      return Math.round(media * 100) / 100;
+    case 'decimal':
+      return Math.round(media * 10) / 10;
+    case 'half':
+      return Math.round(media * 2) / 2;
+    case 'integer':
+      return Math.round(media);
+    default:
+      return media;
+  }
+}
+
+function formatNota(n: number | null, casas = 1): string {
+  if (n === null || n === undefined) return '—';
+  return n.toFixed(casas).replace('.', ',');
+}
+
+const ROUNDING_STORAGE_KEY = 'notas:roundingMode';
 
 const DISC_BG: Record<string, string> = {
   azul: 'bg-blue-500', roxo: 'bg-purple-500', verde: 'bg-green-500',
@@ -78,10 +113,13 @@ function gradeClass(nota: number | null): string {
   return 'text-green-600 dark:text-green-400';
 }
 
-function recalcularAlunos(alunos: AlunoNota[], tipos: TipoAvaliacao[]): AlunoNota[] {
+function recalcularAlunos(alunos: AlunoNota[], tipos: TipoAvaliacao[], mode: RoundingMode): AlunoNota[] {
   return alunos.map(a => {
     const media = calcularMedia(a.notas, tipos);
-    return { ...a, media, situacao: calcularSituacao(media) };
+    const notaArredondada = a.arredondadaManual && a.notaArredondada !== null
+      ? a.notaArredondada
+      : arredondarMedia(media, mode);
+    return { ...a, media, situacao: calcularSituacao(media), notaArredondada };
   });
 }
 
@@ -255,8 +293,26 @@ export default function Notas() {
   const [formTipo, setFormTipo] = useState<{ nome: string; pesoStr: string }>({ nome: '', pesoStr: '1' });
   const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
   const [pasteCount, setPasteCount] = useState(0);
+  const [roundingMode, setRoundingMode] = useState<RoundingMode>(() => {
+    if (typeof window === 'undefined') return 'half';
+    const saved = window.localStorage.getItem(ROUNDING_STORAGE_KEY) as RoundingMode | null;
+    return saved && ['none','decimal','half','integer'].includes(saved) ? saved : 'half';
+  });
+  const [dialogConfig, setDialogConfig] = useState(false);
+  const [usarArredondadaParaSituacao, setUsarArredondadaParaSituacao] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('notas:situacaoArredondada') === '1';
+  });
   const { toast } = useToast();
   const { userId, canEdit, readOnly } = usePermissions();
+
+  useEffect(() => {
+    window.localStorage.setItem(ROUNDING_STORAGE_KEY, roundingMode);
+  }, [roundingMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem('notas:situacaoArredondada', usarArredondadaParaSituacao ? '1' : '0');
+  }, [usarArredondadaParaSituacao]);
 
   const cellRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const tiposRef = useRef(tiposAvaliacao);
@@ -292,6 +348,16 @@ export default function Notas() {
   }, [filterTurma, userId, readOnly]);
 
   useEffect(() => { if (filterTurma && filterDisciplina) loadNotas(); else setAlunosNotas([]); }, [filterTurma, filterDisciplina, filterBimestre]);
+
+  // Recalcula nota arredondada (não-manual) quando muda o modo de arredondamento
+  useEffect(() => {
+    setAlunosNotas(prev => prev.map(a => ({
+      ...a,
+      notaArredondada: a.arredondadaManual && a.notaArredondada !== null
+        ? a.notaArredondada
+        : arredondarMedia(a.media, roundingMode),
+    })));
+  }, [roundingMode]);
 
   async function loadTurmas() {
     if (readOnly) {
@@ -365,10 +431,31 @@ export default function Notas() {
       if (notasMap[n.aluno_id]) notasMap[n.aluno_id][n.tipo_avaliacao_id] = n.nota;
     });
 
+    // Buscar notas arredondadas manuais salvas
+    const { data: arredondadas } = await (supabase as any).from('medias_arredondadas').select('*')
+      .eq('turma_id', filterTurma)
+      .eq('disciplina_id', filterDisciplina)
+      .eq('bimestre', parseInt(filterBimestre))
+      .in('aluno_id', alunos.map(a => a.id));
+
+    const arredMap: Record<string, { nota: number; manual: boolean }> = {};
+    (arredondadas || []).forEach((r: any) => {
+      arredMap[r.aluno_id] = { nota: Number(r.nota_arredondada), manual: !!r.manual };
+    });
+
     const result: AlunoNota[] = alunos.map(a => {
       const notas = notasMap[a.id] || {};
       const media = calcularMedia(notas, tiposArr);
-      return { ...a, notas, media, situacao: calcularSituacao(media) };
+      const saved = arredMap[a.id];
+      const notaArredondada = saved ? saved.nota : arredondarMedia(media, roundingMode);
+      return {
+        ...a,
+        notas,
+        media,
+        situacao: calcularSituacao(media),
+        notaArredondada,
+        arredondadaManual: saved ? saved.manual : false,
+      };
     });
     setAlunosNotas(result);
     setLoading(false);
@@ -399,11 +486,14 @@ export default function Notas() {
       if (i !== rowIdx) return a;
       const novas = { ...a.notas, [tipo.id]: nota };
       const media = calcularMedia(novas, tiposRef.current);
-      return { ...a, notas: novas, media, situacao: calcularSituacao(media) };
+      const notaArredondada = a.arredondadaManual && a.notaArredondada !== null
+        ? a.notaArredondada
+        : arredondarMedia(media, roundingMode);
+      return { ...a, notas: novas, media, situacao: calcularSituacao(media), notaArredondada };
     }));
 
     persistNota(aluno.id, tipo.id, nota);
-  }, [persistNota]);
+  }, [persistNota, roundingMode]);
 
   const handleCellKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>, row: number, col: number) => {
     const maxRow = alunosRef.current.length - 1;
