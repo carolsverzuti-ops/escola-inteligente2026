@@ -657,7 +657,7 @@ export default function Notas() {
     await supabase.from('tipos_avaliacao').update({ nome, peso }).eq('id', id);
     setTiposAvaliacao(prev => {
       const updated = prev.map(t => t.id === id ? { ...t, nome, peso } : t);
-      setAlunosNotas(old => recalcularAlunos(old, updated));
+      setAlunosNotas(old => recalcularAlunos(old, updated, roundingMode));
       return updated;
     });
     toast({ title: 'Avaliação atualizada!' });
