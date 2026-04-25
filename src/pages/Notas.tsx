@@ -681,10 +681,77 @@ export default function Notas() {
     loadNotas();
   }
 
+  /** Persiste nota arredondada manual no banco. Se nota === null, remove (volta ao automático). */
+  async function persistArredondada(alunoId: string, nota: number | null, manual: boolean) {
+    if (!canEdit || !userId) return;
+    if (nota === null) {
+      await (supabase as any).from('medias_arredondadas').delete()
+        .eq('user_id', userId)
+        .eq('aluno_id', alunoId)
+        .eq('disciplina_id', filterDisciplina)
+        .eq('bimestre', parseInt(filterBimestre));
+    } else {
+      await (supabase as any).from('medias_arredondadas').upsert({
+        user_id: userId,
+        aluno_id: alunoId,
+        turma_id: filterTurma,
+        disciplina_id: filterDisciplina,
+        bimestre: parseInt(filterBimestre),
+        nota_arredondada: nota,
+        manual,
+      }, { onConflict: 'user_id,aluno_id,disciplina_id,bimestre' });
+    }
+  }
+
+  /** Handler de edição manual da nota arredondada. */
+  function handleArredondadaChange(alunoId: string, raw: string) {
+    if (!canEdit) return;
+    const trimmed = raw.trim();
+    const aluno = alunosRef.current.find(a => a.id === alunoId);
+    if (!aluno) return;
+
+    if (trimmed === '' || trimmed === '—' || trimmed === '-') {
+      // Limpou: volta para o cálculo automático
+      const auto = arredondarMedia(aluno.media, roundingMode);
+      setAlunosNotas(prev => prev.map(a => a.id === alunoId
+        ? { ...a, notaArredondada: auto, arredondadaManual: false }
+        : a));
+      persistArredondada(alunoId, null, false);
+      return;
+    }
+    const nota = parseNota(trimmed);
+    if (nota === null) return;
+    setAlunosNotas(prev => prev.map(a => a.id === alunoId
+      ? { ...a, notaArredondada: nota, arredondadaManual: true }
+      : a));
+    persistArredondada(alunoId, nota, true);
+  }
+
+  /** Reaplica o arredondamento automático em todos os alunos (descarta sobrescritas manuais). */
+  async function resetArredondamentoManual() {
+    if (!confirm('Descartar todas as notas arredondadas editadas manualmente nesta planilha?\n\nA média original NÃO será afetada.')) return;
+    const idsManuais = alunosRef.current.filter(a => a.arredondadaManual).map(a => a.id);
+    if (!idsManuais.length) {
+      toast({ title: 'Nada a fazer', description: 'Nenhuma nota arredondada foi editada manualmente.' });
+      return;
+    }
+    await (supabase as any).from('medias_arredondadas').delete()
+      .eq('user_id', userId!)
+      .eq('disciplina_id', filterDisciplina)
+      .eq('bimestre', parseInt(filterBimestre))
+      .in('aluno_id', idsManuais);
+    setAlunosNotas(prev => prev.map(a => ({
+      ...a,
+      arredondadaManual: false,
+      notaArredondada: arredondarMedia(a.media, roundingMode),
+    })));
+    toast({ title: 'Arredondamentos manuais descartados', description: `${idsManuais.length} aluno(s) voltaram ao cálculo automático.` });
+  }
+
   function exportarCSV() {
-    const header = ['Nº', 'Nome', ...tiposAvaliacao.map(t => t.nome), 'Média', 'Situação'].join(',');
+    const header = ['Nº', 'Nome', ...tiposAvaliacao.map(t => t.nome), 'Média Final', 'Nota Arredondada', 'Situação'].join(',');
     const rows = alunosNotas.map(a =>
-      [a.numero_chamada, `"${a.nome}"`, ...tiposAvaliacao.map(t => a.notas[t.id] ?? ''), a.media?.toFixed(2) ?? '', a.situacao].join(',')
+      [a.numero_chamada, `"${a.nome}"`, ...tiposAvaliacao.map(t => a.notas[t.id] ?? ''), a.media?.toFixed(2) ?? '', a.notaArredondada ?? '', a.situacao].join(',')
     );
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -696,9 +763,9 @@ export default function Notas() {
     const discNome = discAtual?.nome || '';
     const turmaNome = turmaAtual?.nome || '';
     const header = `Notas - ${discNome} - ${turmaNome} - ${filterBimestre}º Bimestre\n\n`;
-    const cols = ['Nº', 'Nome', ...tiposAvaliacao.map(t => `${t.nome} (Peso ${t.peso})`), 'Média', 'Situação'].join('\t');
+    const cols = ['Nº', 'Nome', ...tiposAvaliacao.map(t => `${t.nome} (Peso ${t.peso})`), 'Média Final', 'Nota Arredondada', 'Situação'].join('\t');
     const rows = alunosNotas.map(a =>
-      [a.numero_chamada, a.nome, ...tiposAvaliacao.map(t => a.notas[t.id] ?? ''), a.media?.toFixed(2) ?? '', a.situacao].join('\t')
+      [a.numero_chamada, a.nome, ...tiposAvaliacao.map(t => a.notas[t.id] ?? ''), a.media?.toFixed(2) ?? '', a.notaArredondada ?? '', a.situacao].join('\t')
     );
     const avgRow = ['', 'Média da Turma', ...tiposAvaliacao.map(tipo => {
       const vals = alunosNotas.map(a => a.notas[tipo.id]).filter(v => v !== null && v !== undefined) as number[];
@@ -706,6 +773,9 @@ export default function Notas() {
     }), (() => {
       const medias = alunosNotas.map(a => a.media).filter(m => m !== null) as number[];
       return medias.length ? (medias.reduce((a, b) => a + b, 0) / medias.length).toFixed(2) : '';
+    })(), (() => {
+      const arred = alunosNotas.map(a => a.notaArredondada).filter(m => m !== null) as number[];
+      return arred.length ? (arred.reduce((a, b) => a + b, 0) / arred.length).toFixed(2) : '';
     })(), ''].join('\t');
 
     const content = header + [cols, ...rows, '', avgRow].join('\n');
