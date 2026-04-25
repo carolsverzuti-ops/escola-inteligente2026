@@ -230,6 +230,45 @@ export type Database = {
           },
         ]
       }
+      medias_arredondadas: {
+        Row: {
+          aluno_id: string
+          bimestre: number
+          created_at: string
+          disciplina_id: string
+          id: string
+          manual: boolean
+          nota_arredondada: number
+          turma_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          aluno_id: string
+          bimestre: number
+          created_at?: string
+          disciplina_id: string
+          id?: string
+          manual?: boolean
+          nota_arredondada: number
+          turma_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          aluno_id?: string
+          bimestre?: number
+          created_at?: string
+          disciplina_id?: string
+          id?: string
+          manual?: boolean
+          nota_arredondada?: number
+          turma_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notas: {
         Row: {
           aluno_id: string | null

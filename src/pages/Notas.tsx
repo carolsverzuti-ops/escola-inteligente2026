@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, KeyboardEvent, ClipboardEvent } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Plus, Trash2, Download, AlertCircle, FileSpreadsheet, Pencil, ChevronLeft, ChevronRight, Check, Clipboard, Info, Eye } from 'lucide-react';
+import { Plus, Trash2, Download, AlertCircle, FileSpreadsheet, Pencil, ChevronLeft, ChevronRight, Check, Clipboard, Info, Eye, Settings, RotateCcw } from 'lucide-react';
 import { PageHeader, FilterBar, BadgeSituacao, LoadingSpinner } from '@/components/ui-escola';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { getDisciplinaDot } from '@/pages/Materias';
@@ -30,7 +31,41 @@ interface AlunoNota {
   notas: Record<string, number | null>;
   media: number | null;
   situacao: string;
+  notaArredondada: number | null;
+  arredondadaManual: boolean;
 }
+
+type RoundingMode = 'none' | 'decimal' | 'half' | 'integer';
+
+const ROUNDING_LABELS: Record<RoundingMode, string> = {
+  none: 'Sem arredondamento',
+  decimal: '1 casa decimal (ex: 6,75 → 6,8)',
+  half: 'Meio ponto (ex: 6,75 → 7,0 / 6,3 → 6,5)',
+  integer: 'Número inteiro (ex: 6,75 → 7)',
+};
+
+function arredondarMedia(media: number | null, mode: RoundingMode): number | null {
+  if (media === null || media === undefined) return null;
+  switch (mode) {
+    case 'none':
+      return Math.round(media * 100) / 100;
+    case 'decimal':
+      return Math.round(media * 10) / 10;
+    case 'half':
+      return Math.round(media * 2) / 2;
+    case 'integer':
+      return Math.round(media);
+    default:
+      return media;
+  }
+}
+
+function formatNota(n: number | null, casas = 1): string {
+  if (n === null || n === undefined) return '—';
+  return n.toFixed(casas).replace('.', ',');
+}
+
+const ROUNDING_STORAGE_KEY = 'notas:roundingMode';
 
 const DISC_BG: Record<string, string> = {
   azul: 'bg-blue-500', roxo: 'bg-purple-500', verde: 'bg-green-500',
@@ -78,10 +113,13 @@ function gradeClass(nota: number | null): string {
   return 'text-green-600 dark:text-green-400';
 }
 
-function recalcularAlunos(alunos: AlunoNota[], tipos: TipoAvaliacao[]): AlunoNota[] {
+function recalcularAlunos(alunos: AlunoNota[], tipos: TipoAvaliacao[], mode: RoundingMode): AlunoNota[] {
   return alunos.map(a => {
     const media = calcularMedia(a.notas, tipos);
-    return { ...a, media, situacao: calcularSituacao(media) };
+    const notaArredondada = a.arredondadaManual && a.notaArredondada !== null
+      ? a.notaArredondada
+      : arredondarMedia(media, mode);
+    return { ...a, media, situacao: calcularSituacao(media), notaArredondada };
   });
 }
 
@@ -255,8 +293,26 @@ export default function Notas() {
   const [formTipo, setFormTipo] = useState<{ nome: string; pesoStr: string }>({ nome: '', pesoStr: '1' });
   const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
   const [pasteCount, setPasteCount] = useState(0);
+  const [roundingMode, setRoundingMode] = useState<RoundingMode>(() => {
+    if (typeof window === 'undefined') return 'half';
+    const saved = window.localStorage.getItem(ROUNDING_STORAGE_KEY) as RoundingMode | null;
+    return saved && ['none','decimal','half','integer'].includes(saved) ? saved : 'half';
+  });
+  const [dialogConfig, setDialogConfig] = useState(false);
+  const [usarArredondadaParaSituacao, setUsarArredondadaParaSituacao] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('notas:situacaoArredondada') === '1';
+  });
   const { toast } = useToast();
   const { userId, canEdit, readOnly } = usePermissions();
+
+  useEffect(() => {
+    window.localStorage.setItem(ROUNDING_STORAGE_KEY, roundingMode);
+  }, [roundingMode]);
+
+  useEffect(() => {
+    window.localStorage.setItem('notas:situacaoArredondada', usarArredondadaParaSituacao ? '1' : '0');
+  }, [usarArredondadaParaSituacao]);
 
   const cellRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const tiposRef = useRef(tiposAvaliacao);
@@ -292,6 +348,16 @@ export default function Notas() {
   }, [filterTurma, userId, readOnly]);
 
   useEffect(() => { if (filterTurma && filterDisciplina) loadNotas(); else setAlunosNotas([]); }, [filterTurma, filterDisciplina, filterBimestre]);
+
+  // Recalcula nota arredondada (não-manual) quando muda o modo de arredondamento
+  useEffect(() => {
+    setAlunosNotas(prev => prev.map(a => ({
+      ...a,
+      notaArredondada: a.arredondadaManual && a.notaArredondada !== null
+        ? a.notaArredondada
+        : arredondarMedia(a.media, roundingMode),
+    })));
+  }, [roundingMode]);
 
   async function loadTurmas() {
     if (readOnly) {
@@ -365,10 +431,31 @@ export default function Notas() {
       if (notasMap[n.aluno_id]) notasMap[n.aluno_id][n.tipo_avaliacao_id] = n.nota;
     });
 
+    // Buscar notas arredondadas manuais salvas
+    const { data: arredondadas } = await (supabase as any).from('medias_arredondadas').select('*')
+      .eq('turma_id', filterTurma)
+      .eq('disciplina_id', filterDisciplina)
+      .eq('bimestre', parseInt(filterBimestre))
+      .in('aluno_id', alunos.map(a => a.id));
+
+    const arredMap: Record<string, { nota: number; manual: boolean }> = {};
+    (arredondadas || []).forEach((r: any) => {
+      arredMap[r.aluno_id] = { nota: Number(r.nota_arredondada), manual: !!r.manual };
+    });
+
     const result: AlunoNota[] = alunos.map(a => {
       const notas = notasMap[a.id] || {};
       const media = calcularMedia(notas, tiposArr);
-      return { ...a, notas, media, situacao: calcularSituacao(media) };
+      const saved = arredMap[a.id];
+      const notaArredondada = saved ? saved.nota : arredondarMedia(media, roundingMode);
+      return {
+        ...a,
+        notas,
+        media,
+        situacao: calcularSituacao(media),
+        notaArredondada,
+        arredondadaManual: saved ? saved.manual : false,
+      };
     });
     setAlunosNotas(result);
     setLoading(false);
@@ -399,11 +486,14 @@ export default function Notas() {
       if (i !== rowIdx) return a;
       const novas = { ...a.notas, [tipo.id]: nota };
       const media = calcularMedia(novas, tiposRef.current);
-      return { ...a, notas: novas, media, situacao: calcularSituacao(media) };
+      const notaArredondada = a.arredondadaManual && a.notaArredondada !== null
+        ? a.notaArredondada
+        : arredondarMedia(media, roundingMode);
+      return { ...a, notas: novas, media, situacao: calcularSituacao(media), notaArredondada };
     }));
 
     persistNota(aluno.id, tipo.id, nota);
-  }, [persistNota]);
+  }, [persistNota, roundingMode]);
 
   const handleCellKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>, row: number, col: number) => {
     const maxRow = alunosRef.current.length - 1;
@@ -567,7 +657,7 @@ export default function Notas() {
     await supabase.from('tipos_avaliacao').update({ nome, peso }).eq('id', id);
     setTiposAvaliacao(prev => {
       const updated = prev.map(t => t.id === id ? { ...t, nome, peso } : t);
-      setAlunosNotas(old => recalcularAlunos(old, updated));
+      setAlunosNotas(old => recalcularAlunos(old, updated, roundingMode));
       return updated;
     });
     toast({ title: 'Avaliação atualizada!' });
@@ -591,10 +681,77 @@ export default function Notas() {
     loadNotas();
   }
 
+  /** Persiste nota arredondada manual no banco. Se nota === null, remove (volta ao automático). */
+  async function persistArredondada(alunoId: string, nota: number | null, manual: boolean) {
+    if (!canEdit || !userId) return;
+    if (nota === null) {
+      await (supabase as any).from('medias_arredondadas').delete()
+        .eq('user_id', userId)
+        .eq('aluno_id', alunoId)
+        .eq('disciplina_id', filterDisciplina)
+        .eq('bimestre', parseInt(filterBimestre));
+    } else {
+      await (supabase as any).from('medias_arredondadas').upsert({
+        user_id: userId,
+        aluno_id: alunoId,
+        turma_id: filterTurma,
+        disciplina_id: filterDisciplina,
+        bimestre: parseInt(filterBimestre),
+        nota_arredondada: nota,
+        manual,
+      }, { onConflict: 'user_id,aluno_id,disciplina_id,bimestre' });
+    }
+  }
+
+  /** Handler de edição manual da nota arredondada. */
+  function handleArredondadaChange(alunoId: string, raw: string) {
+    if (!canEdit) return;
+    const trimmed = raw.trim();
+    const aluno = alunosRef.current.find(a => a.id === alunoId);
+    if (!aluno) return;
+
+    if (trimmed === '' || trimmed === '—' || trimmed === '-') {
+      // Limpou: volta para o cálculo automático
+      const auto = arredondarMedia(aluno.media, roundingMode);
+      setAlunosNotas(prev => prev.map(a => a.id === alunoId
+        ? { ...a, notaArredondada: auto, arredondadaManual: false }
+        : a));
+      persistArredondada(alunoId, null, false);
+      return;
+    }
+    const nota = parseNota(trimmed);
+    if (nota === null) return;
+    setAlunosNotas(prev => prev.map(a => a.id === alunoId
+      ? { ...a, notaArredondada: nota, arredondadaManual: true }
+      : a));
+    persistArredondada(alunoId, nota, true);
+  }
+
+  /** Reaplica o arredondamento automático em todos os alunos (descarta sobrescritas manuais). */
+  async function resetArredondamentoManual() {
+    if (!confirm('Descartar todas as notas arredondadas editadas manualmente nesta planilha?\n\nA média original NÃO será afetada.')) return;
+    const idsManuais = alunosRef.current.filter(a => a.arredondadaManual).map(a => a.id);
+    if (!idsManuais.length) {
+      toast({ title: 'Nada a fazer', description: 'Nenhuma nota arredondada foi editada manualmente.' });
+      return;
+    }
+    await (supabase as any).from('medias_arredondadas').delete()
+      .eq('user_id', userId!)
+      .eq('disciplina_id', filterDisciplina)
+      .eq('bimestre', parseInt(filterBimestre))
+      .in('aluno_id', idsManuais);
+    setAlunosNotas(prev => prev.map(a => ({
+      ...a,
+      arredondadaManual: false,
+      notaArredondada: arredondarMedia(a.media, roundingMode),
+    })));
+    toast({ title: 'Arredondamentos manuais descartados', description: `${idsManuais.length} aluno(s) voltaram ao cálculo automático.` });
+  }
+
   function exportarCSV() {
-    const header = ['Nº', 'Nome', ...tiposAvaliacao.map(t => t.nome), 'Média', 'Situação'].join(',');
+    const header = ['Nº', 'Nome', ...tiposAvaliacao.map(t => t.nome), 'Média Final', 'Nota Arredondada', 'Situação'].join(',');
     const rows = alunosNotas.map(a =>
-      [a.numero_chamada, `"${a.nome}"`, ...tiposAvaliacao.map(t => a.notas[t.id] ?? ''), a.media?.toFixed(2) ?? '', a.situacao].join(',')
+      [a.numero_chamada, `"${a.nome}"`, ...tiposAvaliacao.map(t => a.notas[t.id] ?? ''), a.media?.toFixed(2) ?? '', a.notaArredondada ?? '', a.situacao].join(',')
     );
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -606,9 +763,9 @@ export default function Notas() {
     const discNome = discAtual?.nome || '';
     const turmaNome = turmaAtual?.nome || '';
     const header = `Notas - ${discNome} - ${turmaNome} - ${filterBimestre}º Bimestre\n\n`;
-    const cols = ['Nº', 'Nome', ...tiposAvaliacao.map(t => `${t.nome} (Peso ${t.peso})`), 'Média', 'Situação'].join('\t');
+    const cols = ['Nº', 'Nome', ...tiposAvaliacao.map(t => `${t.nome} (Peso ${t.peso})`), 'Média Final', 'Nota Arredondada', 'Situação'].join('\t');
     const rows = alunosNotas.map(a =>
-      [a.numero_chamada, a.nome, ...tiposAvaliacao.map(t => a.notas[t.id] ?? ''), a.media?.toFixed(2) ?? '', a.situacao].join('\t')
+      [a.numero_chamada, a.nome, ...tiposAvaliacao.map(t => a.notas[t.id] ?? ''), a.media?.toFixed(2) ?? '', a.notaArredondada ?? '', a.situacao].join('\t')
     );
     const avgRow = ['', 'Média da Turma', ...tiposAvaliacao.map(tipo => {
       const vals = alunosNotas.map(a => a.notas[tipo.id]).filter(v => v !== null && v !== undefined) as number[];
@@ -616,6 +773,9 @@ export default function Notas() {
     }), (() => {
       const medias = alunosNotas.map(a => a.media).filter(m => m !== null) as number[];
       return medias.length ? (medias.reduce((a, b) => a + b, 0) / medias.length).toFixed(2) : '';
+    })(), (() => {
+      const arred = alunosNotas.map(a => a.notaArredondada).filter(m => m !== null) as number[];
+      return arred.length ? (arred.reduce((a, b) => a + b, 0) / arred.length).toFixed(2) : '';
     })(), ''].join('\t');
 
     const content = header + [cols, ...rows, '', avgRow].join('\n');
@@ -629,15 +789,21 @@ export default function Notas() {
   const discAtual = disciplinas.find(d => d.id === filterDisciplina);
   const cor = discAtual?.cor || 'azul';
 
-  const abaixoMedia = alunosNotas.filter(a => a.media !== null && a.media < 5).length;
-  const emRecuperacao = alunosNotas.filter(a => a.media !== null && a.media >= 5 && a.media < 7).length;
-  const aprovados = alunosNotas.filter(a => a.media !== null && a.media >= 7).length;
+  // Situação: pode usar a média original ou a arredondada (configurável)
+  const mediaParaSituacao = (a: AlunoNota): number | null =>
+    usarArredondadaParaSituacao && a.notaArredondada !== null ? a.notaArredondada : a.media;
+  const abaixoMedia = alunosNotas.filter(a => { const m = mediaParaSituacao(a); return m !== null && m < 5; }).length;
+  const emRecuperacao = alunosNotas.filter(a => { const m = mediaParaSituacao(a); return m !== null && m >= 5 && m < 7; }).length;
+  const aprovados = alunosNotas.filter(a => { const m = mediaParaSituacao(a); return m !== null && m >= 7; }).length;
 
   return (
     <div className="animate-fade-in">
       <PageHeader title="Lançamento de Notas" subtitle={readOnly ? 'Modo gestão — visualizando notas dos professores' : 'Planilha de notas — use Tab, Enter, setas e cole notas do Excel'}>
         <div className="flex items-center gap-2">
           {readOnly && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"><Eye className="w-3 h-3" /> Somente leitura</span>}
+          <Button variant="outline" size="sm" onClick={() => setDialogConfig(true)}>
+            <Settings className="w-4 h-4 mr-1.5" />Arredondamento
+          </Button>
           <Button variant="outline" size="sm" onClick={exportarCSV}><Download className="w-4 h-4 mr-1.5" />CSV</Button>
           <Button variant="outline" size="sm" onClick={exportarExcel}><FileSpreadsheet className="w-4 h-4 mr-1.5" />Excel</Button>
           {canEdit && <Button size="sm" onClick={() => setDialogTipo(true)}><Plus className="w-4 h-4 mr-1.5" />Nova Avaliação</Button>}
@@ -753,13 +919,20 @@ export default function Notas() {
                       onMove={moverTipo}
                     />
                   ))}
-                  <th className={cn('px-3 py-2.5 text-center font-bold border-b border-border min-w-[70px]', DISC_BG[cor], 'text-white')}>Média</th>
+                  <th className={cn('px-3 py-2.5 text-center font-bold border-b border-border min-w-[80px]', DISC_BG[cor], 'text-white')}>
+                    Média Final
+                    <div className="text-[9px] font-normal opacity-80">(real / fracionada)</div>
+                  </th>
+                  <th className={cn('px-3 py-2.5 text-center font-bold border-b border-border min-w-[110px]', DISC_BG[cor], 'text-white border-l border-white/30')}>
+                    Nota Arredondada
+                    <div className="text-[9px] font-normal opacity-80">{ROUNDING_LABELS[roundingMode].split(' (')[0].toLowerCase()}</div>
+                  </th>
                   <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground border-b border-border min-w-[130px]">Situação</th>
                 </tr>
               </thead>
               <tbody>
                 {alunosNotas.length === 0 ? (
-                  <tr><td colSpan={tiposAvaliacao.length + 4} className="py-12 text-center text-muted-foreground">Nenhum aluno nesta turma</td></tr>
+                  <tr><td colSpan={tiposAvaliacao.length + 5} className="py-12 text-center text-muted-foreground">Nenhum aluno nesta turma</td></tr>
                 ) : alunosNotas.map((aluno, rowIdx) => {
                   const isLow = aluno.media !== null && aluno.media < 5;
                   return (
@@ -792,8 +965,47 @@ export default function Notas() {
                       <td className={cn('px-3 py-1.5 text-center font-bold text-base border-b border-border/40', DISC_BG_LIGHT[cor], aluno.media !== null ? gradeClass(aluno.media) : 'text-muted-foreground')}>
                         {aluno.media !== null ? aluno.media.toFixed(2) : '—'}
                       </td>
+                      <td className={cn(
+                        'px-1 py-1 text-center border-b border-border/40 border-l border-border/40',
+                        aluno.arredondadaManual && 'bg-amber-50 dark:bg-amber-950/30',
+                      )}>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            disabled={!canEdit || aluno.media === null}
+                            value={aluno.notaArredondada !== null ? String(aluno.notaArredondada).replace('.', ',') : ''}
+                            onChange={e => {
+                              const v = e.target.value;
+                              setAlunosNotas(prev => prev.map(a => a.id === aluno.id
+                                ? { ...a, notaArredondada: v === '' ? null : parseNota(v), arredondadaManual: true }
+                                : a));
+                            }}
+                            onBlur={e => handleArredondadaChange(aluno.id, e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                            placeholder={aluno.media !== null ? formatNota(arredondarMedia(aluno.media, roundingMode), roundingMode === 'integer' ? 0 : 1) : '—'}
+                            className={cn(
+                              'w-full h-9 text-center text-base font-bold bg-transparent focus:outline-none focus:bg-background rounded transition-colors',
+                              aluno.notaArredondada !== null ? gradeClass(aluno.notaArredondada) : 'text-muted-foreground',
+                            )}
+                            title={aluno.arredondadaManual ? 'Editado manualmente — apague para voltar ao automático' : 'Calculado automaticamente'}
+                          />
+                          {aluno.arredondadaManual && (
+                            <span
+                              className="absolute -top-0.5 -right-0.5 text-[9px] bg-amber-500 text-white px-1 rounded-full font-bold leading-tight"
+                              title="Editado manualmente"
+                            >
+                              M
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-3 py-1.5 text-center border-b border-border/40">
-                        {aluno.media !== null ? <BadgeSituacao situacao={aluno.situacao} /> : <span className="text-xs text-muted-foreground">—</span>}
+                        {(() => {
+                          const m = mediaParaSituacao(aluno);
+                          if (m === null) return <span className="text-xs text-muted-foreground">—</span>;
+                          return <BadgeSituacao situacao={calcularSituacao(m)} />;
+                        })()}
                       </td>
                     </tr>
                   );
@@ -817,6 +1029,12 @@ export default function Notas() {
                       {(() => {
                         const medias = alunosNotas.map(a => a.media).filter(m => m !== null) as number[];
                         return medias.length ? (medias.reduce((a, b) => a + b, 0) / medias.length).toFixed(2) : '—';
+                      })()}
+                    </td>
+                    <td className={cn('px-3 py-2 text-center text-sm font-bold border-l border-white/30', DISC_BG[cor], 'text-white')}>
+                      {(() => {
+                        const arred = alunosNotas.map(a => a.notaArredondada).filter(m => m !== null) as number[];
+                        return arred.length ? (arred.reduce((a, b) => a + b, 0) / arred.length).toFixed(2).replace('.', ',') : '—';
                       })()}
                     </td>
                     <td />
@@ -852,6 +1070,80 @@ export default function Notas() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogTipo(false)}>Cancelar</Button>
             <Button onClick={adicionarTipoAvaliacao}>Adicionar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de configuração de arredondamento */}
+      <Dialog open={dialogConfig} onOpenChange={setDialogConfig}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              Configuração de Arredondamento
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm font-semibold mb-2 block">Tipo de arredondamento da nota final</Label>
+              <RadioGroup value={roundingMode} onValueChange={(v) => setRoundingMode(v as RoundingMode)}>
+                {(['none', 'decimal', 'half', 'integer'] as RoundingMode[]).map(mode => (
+                  <label
+                    key={mode}
+                    htmlFor={`mode-${mode}`}
+                    className={cn(
+                      'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
+                      roundingMode === mode ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'
+                    )}
+                  >
+                    <RadioGroupItem value={mode} id={`mode-${mode}`} className="mt-0.5" />
+                    <div className="text-sm">
+                      <div className="font-medium">{ROUNDING_LABELS[mode].split(' (')[0]}</div>
+                      {ROUNDING_LABELS[mode].includes('(') && (
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {ROUNDING_LABELS[mode].match(/\((.+)\)/)?.[1]}
+                        </div>
+                      )}
+                    </div>
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            <div className="border-t pt-3">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={usarArredondadaParaSituacao}
+                  onChange={e => setUsarArredondadaParaSituacao(e.target.checked)}
+                  className="mt-1"
+                />
+                <div className="text-sm">
+                  <div className="font-medium">Usar nota arredondada para definir a situação</div>
+                  <div className="text-xs text-muted-foreground">
+                    Quando marcado, "Aprovado / Recuperação / Abaixo" usa a coluna arredondada em vez da média original.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div className="bg-muted/40 rounded-lg p-3 text-xs space-y-1">
+              <p className="font-semibold flex items-center gap-1.5"><Info className="w-3.5 h-3.5" />Como funciona</p>
+              <p className="text-muted-foreground">• A coluna <strong>Média Final</strong> mantém o valor exato/fracionado.</p>
+              <p className="text-muted-foreground">• A coluna <strong>Nota Arredondada</strong> aplica a regra escolhida.</p>
+              <p className="text-muted-foreground">• Você pode <strong>editar manualmente</strong> a nota arredondada (fica destacada em amarelo com "M").</p>
+              <p className="text-muted-foreground">• Para voltar ao automático, apague a nota da célula manual.</p>
+            </div>
+
+            {canEdit && alunosNotas.some(a => a.arredondadaManual) && (
+              <Button variant="outline" size="sm" onClick={resetArredondamentoManual} className="w-full">
+                <RotateCcw className="w-4 h-4 mr-1.5" />
+                Descartar todas as edições manuais ({alunosNotas.filter(a => a.arredondadaManual).length})
+              </Button>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setDialogConfig(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
