@@ -789,15 +789,21 @@ export default function Notas() {
   const discAtual = disciplinas.find(d => d.id === filterDisciplina);
   const cor = discAtual?.cor || 'azul';
 
-  const abaixoMedia = alunosNotas.filter(a => a.media !== null && a.media < 5).length;
-  const emRecuperacao = alunosNotas.filter(a => a.media !== null && a.media >= 5 && a.media < 7).length;
-  const aprovados = alunosNotas.filter(a => a.media !== null && a.media >= 7).length;
+  // Situação: pode usar a média original ou a arredondada (configurável)
+  const mediaParaSituacao = (a: AlunoNota): number | null =>
+    usarArredondadaParaSituacao && a.notaArredondada !== null ? a.notaArredondada : a.media;
+  const abaixoMedia = alunosNotas.filter(a => { const m = mediaParaSituacao(a); return m !== null && m < 5; }).length;
+  const emRecuperacao = alunosNotas.filter(a => { const m = mediaParaSituacao(a); return m !== null && m >= 5 && m < 7; }).length;
+  const aprovados = alunosNotas.filter(a => { const m = mediaParaSituacao(a); return m !== null && m >= 7; }).length;
 
   return (
     <div className="animate-fade-in">
       <PageHeader title="Lançamento de Notas" subtitle={readOnly ? 'Modo gestão — visualizando notas dos professores' : 'Planilha de notas — use Tab, Enter, setas e cole notas do Excel'}>
         <div className="flex items-center gap-2">
           {readOnly && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-muted text-muted-foreground"><Eye className="w-3 h-3" /> Somente leitura</span>}
+          <Button variant="outline" size="sm" onClick={() => setDialogConfig(true)}>
+            <Settings className="w-4 h-4 mr-1.5" />Arredondamento
+          </Button>
           <Button variant="outline" size="sm" onClick={exportarCSV}><Download className="w-4 h-4 mr-1.5" />CSV</Button>
           <Button variant="outline" size="sm" onClick={exportarExcel}><FileSpreadsheet className="w-4 h-4 mr-1.5" />Excel</Button>
           {canEdit && <Button size="sm" onClick={() => setDialogTipo(true)}><Plus className="w-4 h-4 mr-1.5" />Nova Avaliação</Button>}
