@@ -919,13 +919,20 @@ export default function Notas() {
                       onMove={moverTipo}
                     />
                   ))}
-                  <th className={cn('px-3 py-2.5 text-center font-bold border-b border-border min-w-[70px]', DISC_BG[cor], 'text-white')}>Média</th>
+                  <th className={cn('px-3 py-2.5 text-center font-bold border-b border-border min-w-[80px]', DISC_BG[cor], 'text-white')}>
+                    Média Final
+                    <div className="text-[9px] font-normal opacity-80">(real / fracionada)</div>
+                  </th>
+                  <th className={cn('px-3 py-2.5 text-center font-bold border-b border-border min-w-[110px]', DISC_BG[cor], 'text-white border-l border-white/30')}>
+                    Nota Arredondada
+                    <div className="text-[9px] font-normal opacity-80">{ROUNDING_LABELS[roundingMode].split(' (')[0].toLowerCase()}</div>
+                  </th>
                   <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground border-b border-border min-w-[130px]">Situação</th>
                 </tr>
               </thead>
               <tbody>
                 {alunosNotas.length === 0 ? (
-                  <tr><td colSpan={tiposAvaliacao.length + 4} className="py-12 text-center text-muted-foreground">Nenhum aluno nesta turma</td></tr>
+                  <tr><td colSpan={tiposAvaliacao.length + 5} className="py-12 text-center text-muted-foreground">Nenhum aluno nesta turma</td></tr>
                 ) : alunosNotas.map((aluno, rowIdx) => {
                   const isLow = aluno.media !== null && aluno.media < 5;
                   return (
@@ -958,8 +965,47 @@ export default function Notas() {
                       <td className={cn('px-3 py-1.5 text-center font-bold text-base border-b border-border/40', DISC_BG_LIGHT[cor], aluno.media !== null ? gradeClass(aluno.media) : 'text-muted-foreground')}>
                         {aluno.media !== null ? aluno.media.toFixed(2) : '—'}
                       </td>
+                      <td className={cn(
+                        'px-1 py-1 text-center border-b border-border/40 border-l border-border/40',
+                        aluno.arredondadaManual && 'bg-amber-50 dark:bg-amber-950/30',
+                      )}>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            disabled={!canEdit || aluno.media === null}
+                            value={aluno.notaArredondada !== null ? String(aluno.notaArredondada).replace('.', ',') : ''}
+                            onChange={e => {
+                              const v = e.target.value;
+                              setAlunosNotas(prev => prev.map(a => a.id === aluno.id
+                                ? { ...a, notaArredondada: v === '' ? null : parseNota(v), arredondadaManual: true }
+                                : a));
+                            }}
+                            onBlur={e => handleArredondadaChange(aluno.id, e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                            placeholder={aluno.media !== null ? formatNota(arredondarMedia(aluno.media, roundingMode), roundingMode === 'integer' ? 0 : 1) : '—'}
+                            className={cn(
+                              'w-full h-9 text-center text-base font-bold bg-transparent focus:outline-none focus:bg-background rounded transition-colors',
+                              aluno.notaArredondada !== null ? gradeClass(aluno.notaArredondada) : 'text-muted-foreground',
+                            )}
+                            title={aluno.arredondadaManual ? 'Editado manualmente — apague para voltar ao automático' : 'Calculado automaticamente'}
+                          />
+                          {aluno.arredondadaManual && (
+                            <span
+                              className="absolute -top-0.5 -right-0.5 text-[9px] bg-amber-500 text-white px-1 rounded-full font-bold leading-tight"
+                              title="Editado manualmente"
+                            >
+                              M
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-3 py-1.5 text-center border-b border-border/40">
-                        {aluno.media !== null ? <BadgeSituacao situacao={aluno.situacao} /> : <span className="text-xs text-muted-foreground">—</span>}
+                        {(() => {
+                          const m = mediaParaSituacao(aluno);
+                          if (m === null) return <span className="text-xs text-muted-foreground">—</span>;
+                          return <BadgeSituacao situacao={calcularSituacao(m)} />;
+                        })()}
                       </td>
                     </tr>
                   );
@@ -983,6 +1029,12 @@ export default function Notas() {
                       {(() => {
                         const medias = alunosNotas.map(a => a.media).filter(m => m !== null) as number[];
                         return medias.length ? (medias.reduce((a, b) => a + b, 0) / medias.length).toFixed(2) : '—';
+                      })()}
+                    </td>
+                    <td className={cn('px-3 py-2 text-center text-sm font-bold border-l border-white/30', DISC_BG[cor], 'text-white')}>
+                      {(() => {
+                        const arred = alunosNotas.map(a => a.notaArredondada).filter(m => m !== null) as number[];
+                        return arred.length ? (arred.reduce((a, b) => a + b, 0) / arred.length).toFixed(2).replace('.', ',') : '—';
                       })()}
                     </td>
                     <td />
@@ -1018,6 +1070,80 @@ export default function Notas() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogTipo(false)}>Cancelar</Button>
             <Button onClick={adicionarTipoAvaliacao}>Adicionar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de configuração de arredondamento */}
+      <Dialog open={dialogConfig} onOpenChange={setDialogConfig}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings className="w-5 h-5" />
+              Configuração de Arredondamento
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm font-semibold mb-2 block">Tipo de arredondamento da nota final</Label>
+              <RadioGroup value={roundingMode} onValueChange={(v) => setRoundingMode(v as RoundingMode)}>
+                {(['none', 'decimal', 'half', 'integer'] as RoundingMode[]).map(mode => (
+                  <label
+                    key={mode}
+                    htmlFor={`mode-${mode}`}
+                    className={cn(
+                      'flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors',
+                      roundingMode === mode ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40'
+                    )}
+                  >
+                    <RadioGroupItem value={mode} id={`mode-${mode}`} className="mt-0.5" />
+                    <div className="text-sm">
+                      <div className="font-medium">{ROUNDING_LABELS[mode].split(' (')[0]}</div>
+                      {ROUNDING_LABELS[mode].includes('(') && (
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {ROUNDING_LABELS[mode].match(/\((.+)\)/)?.[1]}
+                        </div>
+                      )}
+                    </div>
+                  </label>
+                ))}
+              </RadioGroup>
+            </div>
+
+            <div className="border-t pt-3">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={usarArredondadaParaSituacao}
+                  onChange={e => setUsarArredondadaParaSituacao(e.target.checked)}
+                  className="mt-1"
+                />
+                <div className="text-sm">
+                  <div className="font-medium">Usar nota arredondada para definir a situação</div>
+                  <div className="text-xs text-muted-foreground">
+                    Quando marcado, "Aprovado / Recuperação / Abaixo" usa a coluna arredondada em vez da média original.
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div className="bg-muted/40 rounded-lg p-3 text-xs space-y-1">
+              <p className="font-semibold flex items-center gap-1.5"><Info className="w-3.5 h-3.5" />Como funciona</p>
+              <p className="text-muted-foreground">• A coluna <strong>Média Final</strong> mantém o valor exato/fracionado.</p>
+              <p className="text-muted-foreground">• A coluna <strong>Nota Arredondada</strong> aplica a regra escolhida.</p>
+              <p className="text-muted-foreground">• Você pode <strong>editar manualmente</strong> a nota arredondada (fica destacada em amarelo com "M").</p>
+              <p className="text-muted-foreground">• Para voltar ao automático, apague a nota da célula manual.</p>
+            </div>
+
+            {canEdit && alunosNotas.some(a => a.arredondadaManual) && (
+              <Button variant="outline" size="sm" onClick={resetArredondamentoManual} className="w-full">
+                <RotateCcw className="w-4 h-4 mr-1.5" />
+                Descartar todas as edições manuais ({alunosNotas.filter(a => a.arredondadaManual).length})
+              </Button>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setDialogConfig(false)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
