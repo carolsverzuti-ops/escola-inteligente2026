@@ -362,7 +362,7 @@ export default function Notas() {
   async function loadTurmas() {
     if (readOnly) {
       // Gestão vê todas as turmas
-      const { data: t } = await supabase.from('turmas').select('id, nome, serie').order('nome');
+      const { data: t } = await supabase.from('turmas').select('id, nome, serie, tipo').order('nome');
       setTurmas(t || []);
       if (t?.length && !filterTurma) setFilterTurma(t[0].id);
       return;
@@ -370,10 +370,18 @@ export default function Notas() {
     // Professor: apenas turmas em que tem matéria vinculada
     const { data: vinculos } = await supabase
       .from('turma_disciplinas')
-      .select('turma_id, turmas:turma_id(id, nome, serie)')
+      .select('turma_id, turmas:turma_id(id, nome, serie, tipo)')
       .eq('user_id', userId!);
     const turmasUnicas = new Map<string, any>();
     (vinculos || []).forEach((v: any) => {
+      if (v.turmas) turmasUnicas.set(v.turmas.id, v.turmas);
+    });
+    // Inclui também turmas personalizadas criadas pelo professor (via membros)
+    const { data: meusMembros } = await (supabase as any)
+      .from('turma_membros')
+      .select('turma_id, turmas:turma_id(id, nome, serie, tipo)')
+      .eq('user_id', userId!);
+    (meusMembros || []).forEach((v: any) => {
       if (v.turmas) turmasUnicas.set(v.turmas.id, v.turmas);
     });
     const lista = Array.from(turmasUnicas.values()).sort((a, b) => a.nome.localeCompare(b.nome));
@@ -409,13 +417,27 @@ export default function Notas() {
   async function loadNotas() {
     setLoading(true);
     setFocusCell(null);
-    const [{ data: tipos }, { data: alunos }] = await Promise.all([
-      supabase.from('tipos_avaliacao').select('*')
-        .eq('turma_id', filterTurma).eq('disciplina_id', filterDisciplina)
-        .eq('bimestre', parseInt(filterBimestre)).order('ordem'),
-      supabase.from('alunos').select('id, nome, numero_chamada')
-        .eq('turma_id', filterTurma).eq('ativo', true).order('numero_chamada'),
-    ]);
+    const turmaSel = turmas.find((t: any) => t.id === filterTurma);
+    const isPersonalizada = (turmaSel as any)?.tipo === 'personalizada';
+    const tiposPromise = supabase.from('tipos_avaliacao').select('*')
+      .eq('turma_id', filterTurma).eq('disciplina_id', filterDisciplina)
+      .eq('bimestre', parseInt(filterBimestre)).order('ordem');
+    let alunosPromise;
+    if (isPersonalizada) {
+      alunosPromise = (supabase as any).from('turma_membros')
+        .select('alunos:aluno_id(id, nome, numero_chamada, ativo)')
+        .eq('turma_id', filterTurma)
+        .then((res: any) => ({
+          data: (res.data || [])
+            .map((m: any) => m.alunos)
+            .filter((a: any) => a && a.ativo)
+            .sort((a: any, b: any) => (a.numero_chamada || 0) - (b.numero_chamada || 0)),
+        }));
+    } else {
+      alunosPromise = supabase.from('alunos').select('id, nome, numero_chamada')
+        .eq('turma_id', filterTurma).eq('ativo', true).order('numero_chamada');
+    }
+    const [{ data: tipos }, { data: alunos }] = await Promise.all([tiposPromise, alunosPromise]);
     const tiposArr: TipoAvaliacao[] = tipos || [];
     setTiposAvaliacao(tiposArr);
     if (!alunos?.length) { setAlunosNotas([]); setLoading(false); return; }
