@@ -798,6 +798,30 @@ export type Database = {
           },
         ]
       }
+      turma_membros: {
+        Row: {
+          aluno_id: string
+          created_at: string
+          id: string
+          turma_id: string
+          user_id: string
+        }
+        Insert: {
+          aluno_id: string
+          created_at?: string
+          id?: string
+          turma_id: string
+          user_id: string
+        }
+        Update: {
+          aluno_id?: string
+          created_at?: string
+          id?: string
+          turma_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       turmas: {
         Row: {
           ano_letivo: number
@@ -807,6 +831,7 @@ export type Database = {
           nome: string
           observacoes: string | null
           serie: string
+          tipo: string
           turno: string
           updated_at: string | null
         }
@@ -818,6 +843,7 @@ export type Database = {
           nome: string
           observacoes?: string | null
           serie: string
+          tipo?: string
           turno?: string
           updated_at?: string | null
         }
@@ -829,6 +855,7 @@ export type Database = {
           nome?: string
           observacoes?: string | null
           serie?: string
+          tipo?: string
           turno?: string
           updated_at?: string | null
         }
