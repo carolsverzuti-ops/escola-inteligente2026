@@ -193,9 +193,9 @@ export default function Turmas() {
     // Sincroniza membros
     const { data: atuais } = await (supabase as any).from('turma_membros')
       .select('aluno_id').eq('turma_id', turmaId);
-    const atuaisSet = new Set((atuais || []).map((m: any) => m.aluno_id));
-    const aRemover = [...atuaisSet].filter(id => !selecionados.has(id));
-    const aAdicionar = [...selecionados].filter(id => !atuaisSet.has(id));
+    const atuaisSet = new Set<string>((atuais || []).map((m: any) => m.aluno_id as string));
+    const aRemover = Array.from(atuaisSet).filter(id => !selecionados.has(id));
+    const aAdicionar = Array.from(selecionados).filter(id => !atuaisSet.has(id));
     if (aRemover.length) {
       await (supabase as any).from('turma_membros').delete()
         .eq('turma_id', turmaId).in('aluno_id', aRemover);
