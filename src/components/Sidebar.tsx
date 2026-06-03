@@ -17,6 +17,7 @@ import {
   Palette,
   LogOut,
   Building2,
+  FolderHeart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -31,6 +32,7 @@ const navProfessor = [
   { label: 'Plano de Aula', icon: BookOpen, path: '/plano-aula' },
   { label: 'Ocorrências de Notebook', icon: Laptop, path: '/ocorrencias' },
   { label: 'Correção de Provas', icon: ScanLine, path: '/correcao-provas' },
+  { label: 'PDI - Evidências', icon: FolderHeart, path: '/pdi-evidencias' },
   { label: 'Relatórios', icon: BarChart3, path: '/relatorios' },
   { label: 'Configurações', icon: Settings, path: '/configuracoes' },
 ];
@@ -42,6 +44,7 @@ const navGestao = [
   { label: 'Notas (todos)', icon: ClipboardList, path: '/notas' },
   { label: 'Planos de Aula', icon: BookOpen, path: '/plano-aula' },
   { label: 'Ocorrências', icon: Laptop, path: '/ocorrencias' },
+  { label: 'PDI - Evidências', icon: FolderHeart, path: '/pdi-evidencias' },
   { label: 'Relatórios', icon: BarChart3, path: '/relatorios' },
   { label: 'Configurações', icon: Settings, path: '/configuracoes' },
 ];
