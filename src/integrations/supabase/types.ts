@@ -411,6 +411,117 @@ export type Database = {
           },
         ]
       }
+      pdi_evidencia_documentos: {
+        Row: {
+          created_at: string
+          evidencia_id: string
+          id: string
+          mime_type: string | null
+          nome_arquivo: string
+          storage_path: string
+          tamanho_bytes: number | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          evidencia_id: string
+          id?: string
+          mime_type?: string | null
+          nome_arquivo: string
+          storage_path: string
+          tamanho_bytes?: number | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          evidencia_id?: string
+          id?: string
+          mime_type?: string | null
+          nome_arquivo?: string
+          storage_path?: string
+          tamanho_bytes?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      pdi_evidencia_fotos: {
+        Row: {
+          created_at: string
+          evidencia_id: string
+          id: string
+          nome: string | null
+          storage_path: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          evidencia_id: string
+          id?: string
+          nome?: string | null
+          storage_path: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          evidencia_id?: string
+          id?: string
+          nome?: string | null
+          storage_path?: string
+          url?: string
+        }
+        Relationships: []
+      }
+      pdi_evidencias: {
+        Row: {
+          ano_letivo: number
+          bimestre: number
+          created_at: string
+          data_realizacao: string
+          descricao: string | null
+          disciplina_id: string | null
+          id: string
+          objetivo: string | null
+          resultados: string | null
+          tipo_atividade: string
+          titulo: string
+          turma_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ano_letivo?: number
+          bimestre?: number
+          created_at?: string
+          data_realizacao?: string
+          descricao?: string | null
+          disciplina_id?: string | null
+          id?: string
+          objetivo?: string | null
+          resultados?: string | null
+          tipo_atividade?: string
+          titulo: string
+          turma_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ano_letivo?: number
+          bimestre?: number
+          created_at?: string
+          data_realizacao?: string
+          descricao?: string | null
+          disciplina_id?: string | null
+          id?: string
+          objetivo?: string | null
+          resultados?: string | null
+          tipo_atividade?: string
+          titulo?: string
+          turma_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       plano_anexos: {
         Row: {
           created_at: string
