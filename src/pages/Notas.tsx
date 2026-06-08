@@ -176,6 +176,11 @@ function ColunaTipoEditor({
               {tipo.nome}
               <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
             </span>
+            {(tipo as any).categoria === 'prova_paulista' && (
+              <span className="mt-0.5 px-1.5 py-px rounded-sm text-[9px] font-bold uppercase tracking-wide bg-amber-100 text-amber-700 border border-amber-300">
+                Prova Paulista
+              </span>
+            )}
             <span className="text-xs font-normal opacity-60">Peso {tipo.peso}</span>
           </button>
         </PopoverTrigger>
@@ -290,7 +295,7 @@ export default function Notas() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [dialogTipo, setDialogTipo] = useState(false);
-  const [formTipo, setFormTipo] = useState<{ nome: string; pesoStr: string }>({ nome: '', pesoStr: '1' });
+  const [formTipo, setFormTipo] = useState<{ nome: string; pesoStr: string; provaPaulista: boolean }>({ nome: '', pesoStr: '1', provaPaulista: false });
   const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
   const [pasteCount, setPasteCount] = useState(0);
   const [roundingMode, setRoundingMode] = useState<RoundingMode>(() => {
@@ -668,9 +673,10 @@ export default function Notas() {
       nome: formTipo.nome.trim(), peso, bimestre: parseInt(filterBimestre),
       disciplina_id: filterDisciplina, turma_id: filterTurma, ordem: tiposAvaliacao.length + 1,
       user_id: userId,
+      categoria: formTipo.provaPaulista ? 'prova_paulista' : 'normal',
     });
     setDialogTipo(false);
-    setFormTipo({ nome: '', pesoStr: '1' });
+    setFormTipo({ nome: '', pesoStr: '1', provaPaulista: false });
     loadNotas();
     toast({ title: 'Avaliação adicionada!' });
   }
@@ -1088,6 +1094,18 @@ export default function Notas() {
               />
               <p className="text-[11px] text-muted-foreground">Aceita números (1, 2, 0,5) ou porcentagem (25%, 40%).</p>
             </div>
+            <label className="flex items-start gap-2 p-2.5 rounded-md border border-border bg-muted/40 cursor-pointer hover:bg-muted/60 transition-colors">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-primary"
+                checked={formTipo.provaPaulista}
+                onChange={e => setFormTipo({ ...formTipo, provaPaulista: e.target.checked })}
+              />
+              <div className="text-xs leading-snug">
+                <span className="font-semibold">Marcar como Prova Paulista</span>
+                <p className="text-muted-foreground">Aparece no painel exclusivo da Prova Paulista para acompanhar a evolução dos alunos por bimestre.</p>
+              </div>
+            </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogTipo(false)}>Cancelar</Button>

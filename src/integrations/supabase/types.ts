@@ -819,6 +819,7 @@ export type Database = {
       tipos_avaliacao: {
         Row: {
           bimestre: number | null
+          categoria: string
           created_at: string | null
           descricao: string | null
           disciplina_id: string | null
@@ -831,6 +832,7 @@ export type Database = {
         }
         Insert: {
           bimestre?: number | null
+          categoria?: string
           created_at?: string | null
           descricao?: string | null
           disciplina_id?: string | null
@@ -843,6 +845,7 @@ export type Database = {
         }
         Update: {
           bimestre?: number | null
+          categoria?: string
           created_at?: string | null
           descricao?: string | null
           disciplina_id?: string | null

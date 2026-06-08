@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { Link } from 'react-router-dom';
 import {
   School, GraduationCap, BookOpen, Laptop,
   TrendingUp, Users, CheckCircle, XCircle, Clock,
-  Filter, RefreshCw, BarChart3,
+  Filter, RefreshCw, BarChart3, Award, ArrowRight,
 } from 'lucide-react';
 import { PageHeader, StatCard, BadgeSituacao } from '@/components/ui-escola';
 import { cn } from '@/lib/utils';
@@ -34,6 +35,76 @@ function ChartCard({ title, icon, children, className }: {
         <h2 className="font-semibold text-sm">{title}</h2>
       </div>
       <div className="p-3">{children}</div>
+    </div>
+  );
+}
+
+function ProvaPaulistaCard() {
+  const [data, setData] = useState<{ media: number; alunos: number; abaixo: number; bimestres: { bimestre: string; media: number | null }[] } | null>(null);
+  useEffect(() => {
+    (async () => {
+      const { data: tipos } = await (supabase as any).from('tipos_avaliacao')
+        .select('id, bimestre').eq('categoria', 'prova_paulista');
+      if (!tipos || tipos.length === 0) { setData({ media: 0, alunos: 0, abaixo: 0, bimestres: [] }); return; }
+      const ids = tipos.map((t: any) => t.id);
+      const { data: ns } = await supabase.from('notas').select('aluno_id, nota, tipo_avaliacao_id, bimestre').in('tipo_avaliacao_id', ids);
+      const valid = (ns || []).filter((n: any) => n.nota != null);
+      const media = valid.length ? valid.reduce((s: number, n: any) => s + Number(n.nota), 0) / valid.length : 0;
+      // por aluno
+      const porAluno = new Map<string, number[]>();
+      valid.forEach((n: any) => {
+        if (!porAluno.has(n.aluno_id)) porAluno.set(n.aluno_id, []);
+        porAluno.get(n.aluno_id)!.push(Number(n.nota));
+      });
+      let abaixo = 0;
+      porAluno.forEach(arr => { const m = arr.reduce((s, v) => s + v, 0) / arr.length; if (m < 6) abaixo++; });
+      const bims = [1, 2, 3, 4].map(b => {
+        const tids = tipos.filter((t: any) => t.bimestre === b).map((t: any) => t.id);
+        const sub = valid.filter((n: any) => tids.includes(n.tipo_avaliacao_id));
+        return { bimestre: `${b}º`, media: sub.length ? Number((sub.reduce((s: number, n: any) => s + Number(n.nota), 0) / sub.length).toFixed(2)) : null };
+      });
+      setData({ media, alunos: porAluno.size, abaixo, bimestres: bims });
+    })();
+  }, []);
+
+  return (
+    <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/20 border border-amber-200/60 dark:border-amber-900/40 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 rounded-lg bg-amber-500 text-white flex items-center justify-center">
+            <Award className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="font-semibold text-sm">Prova Paulista</h2>
+            <p className="text-xs text-muted-foreground">Acompanhamento de evolução por bimestre</p>
+          </div>
+        </div>
+        <Link to="/prova-paulista" className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:underline">
+          Ver detalhes <ArrowRight className="w-3 h-3" />
+        </Link>
+      </div>
+      <div className="grid grid-cols-3 gap-3 mb-3">
+        <div className="bg-card/70 rounded-lg p-2.5 text-center">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Média</p>
+          <p className="text-xl font-bold text-amber-700 dark:text-amber-300">{data ? data.media.toFixed(2) : '—'}</p>
+        </div>
+        <div className="bg-card/70 rounded-lg p-2.5 text-center">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Alunos</p>
+          <p className="text-xl font-bold">{data?.alunos ?? '—'}</p>
+        </div>
+        <div className="bg-card/70 rounded-lg p-2.5 text-center">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Atenção</p>
+          <p className="text-xl font-bold text-destructive">{data?.abaixo ?? '—'}</p>
+        </div>
+      </div>
+      <div className="flex items-end gap-1.5 h-12">
+        {(data?.bimestres ?? [1, 2, 3, 4].map(b => ({ bimestre: `${b}º`, media: null }))).map(b => (
+          <div key={b.bimestre} className="flex-1 flex flex-col items-center justify-end gap-1">
+            <div className="w-full bg-amber-400/70 rounded-t" style={{ height: `${((b.media ?? 0) / 10) * 100}%`, minHeight: b.media != null ? 4 : 0 }} />
+            <span className="text-[10px] text-muted-foreground">{b.bimestre}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -241,6 +312,9 @@ export default function Dashboard() {
       <div className="bg-card border border-border rounded-xl shadow-card p-4">
         <PostItBoard />
       </div>
+
+      {/* Card Prova Paulista */}
+      <ProvaPaulistaCard />
 
       {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
