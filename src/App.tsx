@@ -12,6 +12,7 @@ import PlanoAula from "@/pages/PlanoAula";
 import Ocorrencias from "@/pages/Ocorrencias";
 import CorrecaoProvas from "@/pages/CorrecaoProvas";
 import PdiEvidencias from "@/pages/PdiEvidencias";
+import ProvaPaulista from "@/pages/ProvaPaulista";
 import Relatorios from "@/pages/Relatorios";
 import Configuracoes from "@/pages/Configuracoes";
 import Materias from "@/pages/Materias";
@@ -68,6 +69,7 @@ function ProtectedRoutes() {
         <Route path="/ocorrencias" element={<Ocorrencias />} />
         <Route path="/correcao-provas" element={<CorrecaoProvas />} />
         <Route path="/pdi-evidencias" element={<PdiEvidencias />} />
+        <Route path="/prova-paulista" element={<ProvaPaulista />} />
         <Route path="/relatorios" element={<Relatorios />} />
         <Route path="/configuracoes" element={<Configuracoes />} />
         <Route path="*" element={<Navigate to="/" replace />} />
