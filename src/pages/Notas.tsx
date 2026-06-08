@@ -1089,6 +1089,18 @@ export default function Notas() {
               />
               <p className="text-[11px] text-muted-foreground">Aceita números (1, 2, 0,5) ou porcentagem (25%, 40%).</p>
             </div>
+            <label className="flex items-start gap-2 p-2.5 rounded-md border border-border bg-muted/40 cursor-pointer hover:bg-muted/60 transition-colors">
+              <input
+                type="checkbox"
+                className="mt-0.5 accent-primary"
+                checked={formTipo.provaPaulista}
+                onChange={e => setFormTipo({ ...formTipo, provaPaulista: e.target.checked })}
+              />
+              <div className="text-xs leading-snug">
+                <span className="font-semibold">Marcar como Prova Paulista</span>
+                <p className="text-muted-foreground">Aparece no painel exclusivo da Prova Paulista para acompanhar a evolução dos alunos por bimestre.</p>
+              </div>
+            </label>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogTipo(false)}>Cancelar</Button>
