@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { Link } from 'react-router-dom';
 import {
   School, GraduationCap, BookOpen, Laptop,
   TrendingUp, Users, CheckCircle, XCircle, Clock,
-  Filter, RefreshCw, BarChart3,
+  Filter, RefreshCw, BarChart3, Award, ArrowRight,
 } from 'lucide-react';
 import { PageHeader, StatCard, BadgeSituacao } from '@/components/ui-escola';
 import { cn } from '@/lib/utils';
@@ -241,6 +242,9 @@ export default function Dashboard() {
       <div className="bg-card border border-border rounded-xl shadow-card p-4">
         <PostItBoard />
       </div>
+
+      {/* Card Prova Paulista */}
+      <ProvaPaulistaCard />
 
       {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
