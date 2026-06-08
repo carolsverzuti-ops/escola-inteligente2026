@@ -290,7 +290,7 @@ export default function Notas() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [dialogTipo, setDialogTipo] = useState(false);
-  const [formTipo, setFormTipo] = useState<{ nome: string; pesoStr: string }>({ nome: '', pesoStr: '1' });
+  const [formTipo, setFormTipo] = useState<{ nome: string; pesoStr: string; provaPaulista: boolean }>({ nome: '', pesoStr: '1', provaPaulista: false });
   const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
   const [pasteCount, setPasteCount] = useState(0);
   const [roundingMode, setRoundingMode] = useState<RoundingMode>(() => {
@@ -668,9 +668,10 @@ export default function Notas() {
       nome: formTipo.nome.trim(), peso, bimestre: parseInt(filterBimestre),
       disciplina_id: filterDisciplina, turma_id: filterTurma, ordem: tiposAvaliacao.length + 1,
       user_id: userId,
+      categoria: formTipo.provaPaulista ? 'prova_paulista' : 'normal',
     });
     setDialogTipo(false);
-    setFormTipo({ nome: '', pesoStr: '1' });
+    setFormTipo({ nome: '', pesoStr: '1', provaPaulista: false });
     loadNotas();
     toast({ title: 'Avaliação adicionada!' });
   }
