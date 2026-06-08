@@ -176,6 +176,11 @@ function ColunaTipoEditor({
               {tipo.nome}
               <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
             </span>
+            {(tipo as any).categoria === 'prova_paulista' && (
+              <span className="mt-0.5 px-1.5 py-px rounded-sm text-[9px] font-bold uppercase tracking-wide bg-amber-100 text-amber-700 border border-amber-300">
+                Prova Paulista
+              </span>
+            )}
             <span className="text-xs font-normal opacity-60">Peso {tipo.peso}</span>
           </button>
         </PopoverTrigger>
