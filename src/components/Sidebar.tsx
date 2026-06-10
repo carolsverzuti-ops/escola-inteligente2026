@@ -19,6 +19,7 @@ import {
   Building2,
   FolderHeart,
   Award,
+  ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -57,14 +58,18 @@ const ROLE_LABEL: Record<string, string> = {
   coordenador: 'Coordenação',
   direcao: 'Direção',
   vice_direcao: 'Vice-direção',
+  admin: 'Administrador',
 };
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { signOut, profile, role } = useAuth();
-  const { isGestao } = usePermissions();
-  const navItems = isGestao ? navGestao : navProfessor;
+  const { isGestao, isAdmin } = usePermissions();
+  const baseNav = isGestao ? navGestao : navProfessor;
+  const navItems = isAdmin
+    ? [...baseNav.slice(0, 1), { label: 'Gerenciar Usuários', icon: ShieldCheck, path: '/usuarios' }, ...baseNav.slice(1)]
+    : baseNav;
 
   return (
     <aside
@@ -156,8 +161,11 @@ export function MobileSidebar() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   const { signOut, profile, role } = useAuth();
-  const { isGestao } = usePermissions();
-  const navItems = isGestao ? navGestao : navProfessor;
+  const { isGestao, isAdmin } = usePermissions();
+  const baseNav = isGestao ? navGestao : navProfessor;
+  const navItems = isAdmin
+    ? [...baseNav.slice(0, 1), { label: 'Gerenciar Usuários', icon: ShieldCheck, path: '/usuarios' }, ...baseNav.slice(1)]
+    : baseNav;
 
   return (
     <>

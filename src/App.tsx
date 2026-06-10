@@ -16,6 +16,8 @@ import ProvaPaulista from "@/pages/ProvaPaulista";
 import Relatorios from "@/pages/Relatorios";
 import Configuracoes from "@/pages/Configuracoes";
 import Materias from "@/pages/Materias";
+import GerenciarUsuarios from "@/pages/GerenciarUsuarios";
+import AguardandoAprovacao from "@/pages/AguardandoAprovacao";
 import Login from "@/pages/Login";
 import Cadastro from "@/pages/Cadastro";
 import RecuperarSenha from "@/pages/RecuperarSenha";
@@ -42,7 +44,8 @@ function Layout({ children }: { children: React.ReactNode }) {
 
 function ProtectedRoutes() {
   const { session, loading } = useAuth();
-  const { isGestao } = usePermissions();
+  const { isGestao, isAdmin } = usePermissions();
+  const { profile, role } = useAuth();
 
   if (loading) {
     return (
@@ -54,6 +57,11 @@ function ProtectedRoutes() {
 
   if (!session) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Bloqueia acesso de usuários pendentes/inativos ou sem papel atribuído
+  if (profile && (profile.status === 'pendente' || profile.status === 'inativo' || !role)) {
+    return <AguardandoAprovacao />;
   }
 
   return (
@@ -72,6 +80,7 @@ function ProtectedRoutes() {
         <Route path="/prova-paulista" element={<ProvaPaulista />} />
         <Route path="/relatorios" element={<Relatorios />} />
         <Route path="/configuracoes" element={<Configuracoes />} />
+        <Route path="/usuarios" element={isAdmin ? <GerenciarUsuarios /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

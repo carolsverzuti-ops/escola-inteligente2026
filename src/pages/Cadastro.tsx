@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 
 const ALLOWED_DOMAIN = '@prof.educacao.sp.gov.br';
@@ -15,7 +14,6 @@ export default function Cadastro() {
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<string>('professor');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const { toast } = useToast();
@@ -37,7 +35,7 @@ export default function Cadastro() {
       email: email.toLowerCase().trim(),
       password,
       options: {
-        data: { nome, role },
+        data: { nome },
         emailRedirectTo: window.location.origin,
       },
     });
@@ -57,9 +55,9 @@ export default function Cadastro() {
             <div className="mx-auto flex items-center justify-center w-16 h-16 rounded-2xl bg-primary mb-4">
               <School className="w-8 h-8 text-primary-foreground" />
             </div>
-            <CardTitle>Verifique seu e-mail</CardTitle>
+            <CardTitle>Cadastro recebido</CardTitle>
             <CardDescription>
-              Enviamos um link de confirmação para <strong>{email}</strong>. Clique no link para ativar sua conta.
+              Enviamos um link de confirmação para <strong>{email}</strong>. Após confirmar, sua conta ficará <strong>aguardando aprovação</strong> do administrador antes de liberar o acesso.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -80,7 +78,7 @@ export default function Cadastro() {
             <School className="w-8 h-8 text-primary-foreground" />
           </div>
           <CardTitle className="text-2xl">Criar conta</CardTitle>
-          <CardDescription>Cadastro para professores e coordenadores</CardDescription>
+          <CardDescription>Cadastro para equipe escolar — a função é definida pelo administrador.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSignup} className="space-y-4">
@@ -96,25 +94,14 @@ export default function Cadastro() {
               <Label htmlFor="password">Senha</Label>
               <Input id="password" type="password" placeholder="Mínimo 6 caracteres" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
             </div>
-            <div className="space-y-2">
-              <Label>Tipo de acesso</Label>
-              <Select value={role} onValueChange={setRole}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="professor">Professor</SelectItem>
-                  <SelectItem value="coordenador">Coordenador</SelectItem>
-                  <SelectItem value="vice_direcao">Vice-direção</SelectItem>
-                  <SelectItem value="direcao">Direção</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <Button type="submit" className="w-full" disabled={loading}>
               <UserPlus className="w-4 h-4 mr-2" />
               {loading ? 'Cadastrando...' : 'Criar conta'}
             </Button>
           </form>
+          <p className="mt-4 text-xs text-center text-amber-600 dark:text-amber-400">
+            Sua conta ficará aguardando aprovação do administrador antes de liberar o acesso.
+          </p>
           <p className="mt-4 text-center text-sm text-muted-foreground">
             Já tem conta? <Link to="/login" className="text-primary hover:underline">Entrar</Link>
           </p>

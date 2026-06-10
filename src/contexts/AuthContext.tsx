@@ -2,13 +2,14 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
-export type AppRole = 'professor' | 'coordenador' | 'direcao' | 'vice_direcao';
+export type AppRole = 'professor' | 'coordenador' | 'direcao' | 'vice_direcao' | 'admin';
+export type ProfileStatus = 'pendente' | 'ativo' | 'inativo';
 
 interface AuthContextType {
   session: Session | null;
   user: User | null;
   role: AppRole | null;
-  profile: { nome: string; email: string } | null;
+  profile: { nome: string; email: string; status: ProfileStatus } | null;
   loading: boolean;
   signOut: () => Promise<void>;
 }
@@ -28,16 +29,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
-  const [profile, setProfile] = useState<{ nome: string; email: string } | null>(null);
+  const [profile, setProfile] = useState<{ nome: string; email: string; status: ProfileStatus } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchUserData = async (userId: string) => {
     const [rolesRes, profileRes] = await Promise.all([
-      supabase.from('user_roles').select('role').eq('user_id', userId).single(),
-      supabase.from('profiles').select('nome, email').eq('id', userId).single(),
+      supabase.from('user_roles').select('role').eq('user_id', userId).maybeSingle(),
+      supabase.from('profiles').select('nome, email, status').eq('id', userId).maybeSingle(),
     ]);
-    if (rolesRes.data) setRole(rolesRes.data.role as AppRole);
-    if (profileRes.data) setProfile(profileRes.data);
+    setRole(rolesRes.data ? (rolesRes.data.role as AppRole) : null);
+    if (profileRes.data) setProfile(profileRes.data as any);
+    else setProfile(null);
   };
 
   useEffect(() => {
