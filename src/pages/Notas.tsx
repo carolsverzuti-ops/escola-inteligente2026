@@ -698,10 +698,11 @@ export default function Notas() {
     toast({ title: 'Avaliação adicionada!' });
   }
 
-  async function atualizarTipo(id: string, nome: string, peso: number) {
-    await supabase.from('tipos_avaliacao').update({ nome, peso }).eq('id', id);
+  async function atualizarTipo(id: string, nome: string, peso: number, provaPaulista: boolean) {
+    const categoria = provaPaulista ? 'prova_paulista' : 'normal';
+    await (supabase as any).from('tipos_avaliacao').update({ nome, peso, categoria }).eq('id', id);
     setTiposAvaliacao(prev => {
-      const updated = prev.map(t => t.id === id ? { ...t, nome, peso } : t);
+      const updated = prev.map(t => t.id === id ? { ...t, nome, peso, categoria } as any : t);
       setAlunosNotas(old => recalcularAlunos(old, updated, roundingMode));
       return updated;
     });
