@@ -681,6 +681,7 @@ export type Database = {
           email: string
           id: string
           nome: string
+          status: string
           updated_at: string
         }
         Insert: {
@@ -688,6 +689,7 @@ export type Database = {
           email?: string
           id: string
           nome?: string
+          status?: string
           updated_at?: string
         }
         Update: {
@@ -695,6 +697,7 @@ export type Database = {
           email?: string
           id?: string
           nome?: string
+          status?: string
           updated_at?: string
         }
         Relationships: []
@@ -948,6 +951,7 @@ export type Database = {
           tipo: string
           turno: string
           updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           ano_letivo?: number
@@ -960,6 +964,7 @@ export type Database = {
           tipo?: string
           turno?: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           ano_letivo?: number
@@ -972,6 +977,7 @@ export type Database = {
           tipo?: string
           turno?: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -1013,6 +1019,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_admin: { Args: { _user_id: string }; Returns: boolean }
       is_gestao: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
