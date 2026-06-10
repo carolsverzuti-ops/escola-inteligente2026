@@ -69,7 +69,17 @@ export default function Ocorrencias() {
     setOcorrencias(oc || []);
     setTurmas(t || []);
     const fotoMap: Record<string, OcorrenciaFoto[]> = {};
-    (f || []).forEach((foto: OcorrenciaFoto) => {
+    // Gera signed URLs (bucket privado) e descarta a URL pública antiga.
+    const fotosArr = (f || []) as OcorrenciaFoto[];
+    const paths = fotosArr.map(x => x.path).filter(Boolean);
+    const signedMap = new Map<string, string>();
+    if (paths.length > 0) {
+      const { data: signed } = await supabase.storage
+        .from('ocorrencias-fotos').createSignedUrls(paths, 60 * 60);
+      (signed || []).forEach((s: any) => { if (s?.path && s?.signedUrl) signedMap.set(s.path, s.signedUrl); });
+    }
+    fotosArr.forEach((foto) => {
+      if (foto.path && signedMap.has(foto.path)) foto.url = signedMap.get(foto.path)!;
       if (!fotoMap[foto.ocorrencia_id]) fotoMap[foto.ocorrencia_id] = [];
       fotoMap[foto.ocorrencia_id].push(foto);
     });
@@ -129,8 +139,8 @@ export default function Ocorrencias() {
       const path = `${userId}/${ocorrenciaId}/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
       const { error } = await supabase.storage.from('ocorrencias-fotos').upload(path, file);
       if (error) { console.error('Upload error:', error); continue; }
-      const url = `${SUPABASE_URL}/storage/v1/object/public/ocorrencias-fotos/${path}`;
-      await supabase.from('ocorrencia_fotos').insert({ ocorrencia_id: ocorrenciaId, url, path });
+      // Bucket é privado: armazenamos apenas o path; URL é assinada na exibição.
+      await supabase.from('ocorrencia_fotos').insert({ ocorrencia_id: ocorrenciaId, url: '', path });
     }
   }
 
