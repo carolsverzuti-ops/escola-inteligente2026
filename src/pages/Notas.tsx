@@ -149,21 +149,26 @@ function ColunaTipoEditor({
   onUpdate, onDelete, onMove,
 }: {
   tipo: TipoAvaliacao; cor: string; index: number; total: number;
-  onUpdate: (id: string, nome: string, peso: number) => void;
+  onUpdate: (id: string, nome: string, peso: number, provaPaulista: boolean) => void;
   onDelete: (id: string) => void;
   onMove: (id: string, dir: -1 | 1) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [nome, setNome] = useState(tipo.nome);
   const [pesoStr, setPesoStr] = useState(String(tipo.peso).replace('.', ','));
+  const [provaPaulista, setProvaPaulista] = useState((tipo as any).categoria === 'prova_paulista');
 
-  useEffect(() => { setNome(tipo.nome); setPesoStr(String(tipo.peso).replace('.', ',')); }, [tipo]);
+  useEffect(() => {
+    setNome(tipo.nome);
+    setPesoStr(String(tipo.peso).replace('.', ','));
+    setProvaPaulista((tipo as any).categoria === 'prova_paulista');
+  }, [tipo]);
 
   const salvar = () => {
     if (!nome.trim()) return;
     const pesoNum = parsePeso(pesoStr);
     if (pesoNum === null) return;
-    onUpdate(tipo.id, nome.trim(), pesoNum);
+    onUpdate(tipo.id, nome.trim(), pesoNum, provaPaulista);
     setOpen(false);
   };
 
@@ -203,6 +208,18 @@ function ColunaTipoEditor({
               />
               <p className="text-[10px] text-muted-foreground">Aceita números (1, 2, 0,5) ou porcentagem (25%, 40%).</p>
             </div>
+            <label className="flex items-start gap-2 cursor-pointer rounded-md border border-amber-200 bg-amber-50/60 p-2 text-xs">
+              <input
+                type="checkbox"
+                checked={provaPaulista}
+                onChange={e => setProvaPaulista(e.target.checked)}
+                className="mt-0.5 accent-amber-600"
+              />
+              <span>
+                <span className="font-semibold text-amber-800">Marcar como Prova Paulista</span>
+                <span className="block text-[10px] text-amber-700/80">Inclui no painel da Prova Paulista sem alterar as notas já lançadas.</span>
+              </span>
+            </label>
             <div className="flex items-center justify-between pt-1">
               <div className="flex gap-1">
                 <Button variant="ghost" size="icon" className="h-7 w-7" disabled={index === 0} onClick={() => { onMove(tipo.id, -1); setOpen(false); }}>
