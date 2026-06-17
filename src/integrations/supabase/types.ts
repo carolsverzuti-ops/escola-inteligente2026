@@ -14,6 +14,173 @@ export type Database = {
   }
   public: {
     Tables: {
+      agenda_escola_eventos: {
+        Row: {
+          cor: string | null
+          created_at: string
+          criado_por: string
+          data_fim: string | null
+          data_inicio: string
+          descricao: string | null
+          dia_todo: boolean
+          id: string
+          tipo: Database["public"]["Enums"]["tipo_evento_escola"]
+          titulo: string
+          updated_at: string
+        }
+        Insert: {
+          cor?: string | null
+          created_at?: string
+          criado_por: string
+          data_fim?: string | null
+          data_inicio: string
+          descricao?: string | null
+          dia_todo?: boolean
+          id?: string
+          tipo?: Database["public"]["Enums"]["tipo_evento_escola"]
+          titulo: string
+          updated_at?: string
+        }
+        Update: {
+          cor?: string | null
+          created_at?: string
+          criado_por?: string
+          data_fim?: string | null
+          data_inicio?: string
+          descricao?: string | null
+          dia_todo?: boolean
+          id?: string
+          tipo?: Database["public"]["Enums"]["tipo_evento_escola"]
+          titulo?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      agenda_excecoes: {
+        Row: {
+          atividade: string | null
+          cancelado: boolean
+          created_at: string
+          data: string
+          disciplina_id: string | null
+          horario_grade_id: string
+          id: string
+          observacao: string | null
+          turma_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          atividade?: string | null
+          cancelado?: boolean
+          created_at?: string
+          data: string
+          disciplina_id?: string | null
+          horario_grade_id: string
+          id?: string
+          observacao?: string | null
+          turma_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          atividade?: string | null
+          cancelado?: boolean
+          created_at?: string
+          data?: string
+          disciplina_id?: string | null
+          horario_grade_id?: string
+          id?: string
+          observacao?: string | null
+          turma_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agenda_excecoes_disciplina_id_fkey"
+            columns: ["disciplina_id"]
+            isOneToOne: false
+            referencedRelation: "disciplinas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agenda_excecoes_horario_grade_id_fkey"
+            columns: ["horario_grade_id"]
+            isOneToOne: false
+            referencedRelation: "horario_grade"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agenda_excecoes_turma_id_fkey"
+            columns: ["turma_id"]
+            isOneToOne: false
+            referencedRelation: "turmas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      agenda_professor: {
+        Row: {
+          atividade: string | null
+          cor: string | null
+          created_at: string
+          dia_semana: number
+          disciplina_id: string | null
+          horario_grade_id: string
+          id: string
+          turma_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          atividade?: string | null
+          cor?: string | null
+          created_at?: string
+          dia_semana: number
+          disciplina_id?: string | null
+          horario_grade_id: string
+          id?: string
+          turma_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          atividade?: string | null
+          cor?: string | null
+          created_at?: string
+          dia_semana?: number
+          disciplina_id?: string | null
+          horario_grade_id?: string
+          id?: string
+          turma_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agenda_professor_disciplina_id_fkey"
+            columns: ["disciplina_id"]
+            isOneToOne: false
+            referencedRelation: "disciplinas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agenda_professor_horario_grade_id_fkey"
+            columns: ["horario_grade_id"]
+            isOneToOne: false
+            referencedRelation: "horario_grade"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agenda_professor_turma_id_fkey"
+            columns: ["turma_id"]
+            isOneToOne: false
+            referencedRelation: "turmas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ajustes_plano: {
         Row: {
           created_at: string
@@ -99,6 +266,77 @@ export type Database = {
           },
         ]
       }
+      ano_letivo: {
+        Row: {
+          ano: number
+          ativo: boolean
+          created_at: string
+          data_fim: string
+          data_inicio: string
+          id: string
+        }
+        Insert: {
+          ano: number
+          ativo?: boolean
+          created_at?: string
+          data_fim: string
+          data_inicio: string
+          id?: string
+        }
+        Update: {
+          ano?: number
+          ativo?: boolean
+          created_at?: string
+          data_fim?: string
+          data_inicio?: string
+          id?: string
+        }
+        Relationships: []
+      }
+      apoio_presencial: {
+        Row: {
+          created_at: string
+          criado_por: string
+          data: string
+          horario_grade_id: string | null
+          id: string
+          observacao: string | null
+          professor_id: string
+          responsavel_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          criado_por: string
+          data: string
+          horario_grade_id?: string | null
+          id?: string
+          observacao?: string | null
+          professor_id: string
+          responsavel_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          criado_por?: string
+          data?: string
+          horario_grade_id?: string | null
+          id?: string
+          observacao?: string | null
+          professor_id?: string
+          responsavel_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "apoio_presencial_horario_grade_id_fkey"
+            columns: ["horario_grade_id"]
+            isOneToOne: false
+            referencedRelation: "horario_grade"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       disciplinas: {
         Row: {
           carga_horaria: number | null
@@ -163,6 +401,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      horario_grade: {
+        Row: {
+          created_at: string
+          hora_fim: string
+          hora_inicio: string
+          id: string
+          ordem: number
+          rotulo: string
+          tipo: Database["public"]["Enums"]["tipo_bloco_horario"]
+        }
+        Insert: {
+          created_at?: string
+          hora_fim: string
+          hora_inicio: string
+          id?: string
+          ordem: number
+          rotulo: string
+          tipo?: Database["public"]["Enums"]["tipo_bloco_horario"]
+        }
+        Update: {
+          created_at?: string
+          hora_fim?: string
+          hora_inicio?: string
+          id?: string
+          ordem?: number
+          rotulo?: string
+          tipo?: Database["public"]["Enums"]["tipo_bloco_horario"]
+        }
+        Relationships: []
       }
       lembretes: {
         Row: {
@@ -1029,6 +1297,25 @@ export type Database = {
         | "direcao"
         | "vice_direcao"
         | "admin"
+      tipo_bloco_horario:
+        | "aula"
+        | "intervalo"
+        | "almoco"
+        | "planejamento"
+        | "atpc"
+        | "reuniao"
+        | "outro"
+      tipo_evento_escola:
+        | "reuniao"
+        | "formacao"
+        | "evento"
+        | "avaliacao_externa"
+        | "conselho"
+        | "apoio_presencial"
+        | "acompanhamento"
+        | "observacao"
+        | "visita"
+        | "aviso"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1162,6 +1449,27 @@ export const Constants = {
         "direcao",
         "vice_direcao",
         "admin",
+      ],
+      tipo_bloco_horario: [
+        "aula",
+        "intervalo",
+        "almoco",
+        "planejamento",
+        "atpc",
+        "reuniao",
+        "outro",
+      ],
+      tipo_evento_escola: [
+        "reuniao",
+        "formacao",
+        "evento",
+        "avaliacao_externa",
+        "conselho",
+        "apoio_presencial",
+        "acompanhamento",
+        "observacao",
+        "visita",
+        "aviso",
       ],
     },
   },
