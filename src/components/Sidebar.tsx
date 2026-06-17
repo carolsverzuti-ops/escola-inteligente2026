@@ -20,6 +20,7 @@ import {
   FolderHeart,
   Award,
   ShieldCheck,
+  CalendarDays,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -32,6 +33,7 @@ const navProfessor = [
   { label: 'Matérias', icon: Palette, path: '/materias' },
   { label: 'Notas', icon: ClipboardList, path: '/notas' },
   { label: 'Plano de Aula', icon: BookOpen, path: '/plano-aula' },
+  { label: 'Agenda', icon: CalendarDays, path: '/agenda' },
   { label: 'Ocorrências de Notebook', icon: Laptop, path: '/ocorrencias' },
   { label: 'Correção de Provas', icon: ScanLine, path: '/correcao-provas' },
   { label: 'PDI - Evidências', icon: FolderHeart, path: '/pdi-evidencias' },
@@ -46,6 +48,7 @@ const navGestao = [
   { label: 'Alunos', icon: GraduationCap, path: '/alunos' },
   { label: 'Notas (todos)', icon: ClipboardList, path: '/notas' },
   { label: 'Planos de Aula', icon: BookOpen, path: '/plano-aula' },
+  { label: 'Agenda', icon: CalendarDays, path: '/agenda' },
   { label: 'Ocorrências', icon: Laptop, path: '/ocorrencias' },
   { label: 'PDI - Evidências', icon: FolderHeart, path: '/pdi-evidencias' },
   { label: 'Prova Paulista', icon: Award, path: '/prova-paulista' },
