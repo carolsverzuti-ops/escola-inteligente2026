@@ -178,7 +178,7 @@ function GradeSemanal({ grade, rotina, excecoes, ref, onClickCell, eventos, apoi
                 return (
                   <td key={d.toISOString()} className="p-1 border-r">
                     <button onClick={() => onClickCell(d, b)} className={`w-full text-left p-2 rounded border ${disc ? getDisciplinaBg(disc.cor) : 'bg-muted/30'}`}>
-                      {aula.cancelado && <Badge variant="destructive" className="mb-1 text-[10px]">Cancelada</Badge>}
+                      {aula.fonte === 'excecao' && aula.cancelado && <Badge variant="destructive" className="mb-1 text-[10px]">Cancelada</Badge>}
                       <div className="font-semibold truncate">{disc?.nome || aula.atividade || '—'}</div>
                       {turma && <div className="text-muted-foreground truncate">{turma.nome}</div>}
                       {aula.fonte === 'excecao' && <div className="text-[10px] text-amber-700">alterada</div>}
