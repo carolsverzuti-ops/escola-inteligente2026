@@ -115,8 +115,8 @@ function MinhaAgenda() {
 }
 
 /* ===================== GRADE SEMANAL ===================== */
-function GradeSemanal({ grade, rotina, excecoes, ref, onClickCell, eventos, apoios }: any) {
-  const inicio = startOfWeek(ref);
+function GradeSemanal({ grade, rotina, excecoes, refDate, onClickCell, eventos, apoios }: any) {
+  const inicio = startOfWeek(refDate);
   const dias = DIAS_UTEIS.map(i => addDays(inicio, i - 1));
   const [disciplinas, setDisciplinas] = useState<Record<string, any>>({});
   const [turmas, setTurmas] = useState<Record<string, any>>({});
