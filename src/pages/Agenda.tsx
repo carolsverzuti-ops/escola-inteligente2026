@@ -96,10 +96,10 @@ function MinhaAgenda() {
         </Button>
       </div>
 
-      {view === 'semana' && <GradeSemanal grade={grade} rotina={rotina} excecoes={excecoes} ref={ref} onClickCell={(data, bloco) => setOpenCell({ data, bloco })} eventos={eventos} apoios={apoios} />}
+      {view === 'semana' && <GradeSemanal grade={grade} rotina={rotina} excecoes={excecoes} refDate={ref} onClickCell={(data, bloco) => setOpenCell({ data, bloco })} eventos={eventos} apoios={apoios} />}
       {view === 'dia' && <VisaoDia grade={grade} rotina={rotina} excecoes={excecoes} data={ref} onClickCell={(data, bloco) => setOpenCell({ data, bloco })} eventos={eventos} apoios={apoios} />}
-      {view === 'mes' && <VisaoMes ref={ref} eventos={eventos} apoios={apoios} rotina={rotina} excecoes={excecoes} onSelectDay={(d) => { setRef(d); setView('dia'); }} />}
-      {view === 'ano' && <VisaoAno ref={ref} eventos={eventos} apoios={apoios} onSelectMonth={(d) => { setRef(d); setView('mes'); }} />}
+      {view === 'mes' && <VisaoMes refDate={ref} eventos={eventos} apoios={apoios} rotina={rotina} excecoes={excecoes} onSelectDay={(d) => { setRef(d); setView('dia'); }} />}
+      {view === 'ano' && <VisaoAno refDate={ref} eventos={eventos} apoios={apoios} onSelectMonth={(d) => { setRef(d); setView('mes'); }} />}
 
       {openCell && (
         <PainelAula
@@ -245,7 +245,7 @@ function VisaoDia({ grade, rotina, excecoes, data, onClickCell, eventos, apoios 
 }
 
 /* ===================== VISÃO MÊS ===================== */
-function VisaoMes({ ref, eventos, apoios, rotina, excecoes, onSelectDay }: any) {
+function VisaoMes({ refDate: ref, eventos, apoios, rotina, excecoes, onSelectDay }: any) {
   const ano = ref.getFullYear(), mes = ref.getMonth();
   const primeiro = new Date(ano, mes, 1);
   const ultimo = new Date(ano, mes + 1, 0);
@@ -290,7 +290,7 @@ function VisaoMes({ ref, eventos, apoios, rotina, excecoes, onSelectDay }: any) 
 }
 
 /* ===================== VISÃO ANO ===================== */
-function VisaoAno({ ref, eventos, apoios, onSelectMonth }: any) {
+function VisaoAno({ refDate: ref, eventos, apoios, onSelectMonth }: any) {
   const ano = ref.getFullYear();
   return (
     <div>
