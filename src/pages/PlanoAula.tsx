@@ -221,9 +221,10 @@ function DialogCriar({ open, onClose, disciplinas, turmas, onCreated }: {
     if (!user || !turma || !bimestre) return;
     setSalvando(true);
     // tenta achar existente
-    const { data: ex } = await supabase.from('planejamentos_bimestrais').select('*')
-      .eq('user_id', user.id).eq('turma_id', turma).eq('bimestre', Number(bimestre)).eq('ano', ANO_ATUAL)
-      .filter('disciplina_id', disciplina ? 'eq' : 'is', disciplina || null as any).maybeSingle();
+    let qEx = supabase.from('planejamentos_bimestrais').select('*')
+      .eq('user_id', user.id).eq('turma_id', turma).eq('bimestre', Number(bimestre)).eq('ano', ANO_ATUAL);
+    qEx = disciplina ? qEx.eq('disciplina_id', disciplina) : qEx.is('disciplina_id', null);
+    const { data: ex } = await qEx.maybeSingle();
     if (ex) { onCreated(ex as Planejamento); setSalvando(false); return; }
     const { data, error } = await supabase.from('planejamentos_bimestrais').insert({
       user_id: user.id, turma_id: turma, disciplina_id: disciplina || null, bimestre: Number(bimestre), ano: ANO_ATUAL, status: 'rascunho',
