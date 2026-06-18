@@ -790,6 +790,66 @@ export type Database = {
         }
         Relationships: []
       }
+      planejamentos_bimestrais: {
+        Row: {
+          ano: number
+          bimestre: number
+          created_at: string
+          disciplina_id: string | null
+          id: string
+          observacao_validacao: string | null
+          status: string
+          turma_id: string
+          updated_at: string
+          user_id: string
+          validado_em: string | null
+          validado_por: string | null
+        }
+        Insert: {
+          ano?: number
+          bimestre: number
+          created_at?: string
+          disciplina_id?: string | null
+          id?: string
+          observacao_validacao?: string | null
+          status?: string
+          turma_id: string
+          updated_at?: string
+          user_id: string
+          validado_em?: string | null
+          validado_por?: string | null
+        }
+        Update: {
+          ano?: number
+          bimestre?: number
+          created_at?: string
+          disciplina_id?: string | null
+          id?: string
+          observacao_validacao?: string | null
+          status?: string
+          turma_id?: string
+          updated_at?: string
+          user_id?: string
+          validado_em?: string | null
+          validado_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "planejamentos_bimestrais_disciplina_id_fkey"
+            columns: ["disciplina_id"]
+            isOneToOne: false
+            referencedRelation: "disciplinas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planejamentos_bimestrais_turma_id_fkey"
+            columns: ["turma_id"]
+            isOneToOne: false
+            referencedRelation: "turmas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       plano_anexos: {
         Row: {
           created_at: string
@@ -799,6 +859,7 @@ export type Database = {
           plano_id: string
           storage_path: string
           tamanho_bytes: number | null
+          tipo: string
           user_id: string
         }
         Insert: {
@@ -809,6 +870,7 @@ export type Database = {
           plano_id: string
           storage_path: string
           tamanho_bytes?: number | null
+          tipo?: string
           user_id: string
         }
         Update: {
@@ -819,6 +881,7 @@ export type Database = {
           plano_id?: string
           storage_path?: string
           tamanho_bytes?: number | null
+          tipo?: string
           user_id?: string
         }
         Relationships: [
@@ -853,6 +916,7 @@ export type Database = {
           numero_aulas: number | null
           objetivo_geral: string | null
           objetivos: string | null
+          planejamento_id: string | null
           professor: string | null
           recursos: string | null
           status: string
@@ -882,6 +946,7 @@ export type Database = {
           numero_aulas?: number | null
           objetivo_geral?: string | null
           objetivos?: string | null
+          planejamento_id?: string | null
           professor?: string | null
           recursos?: string | null
           status?: string
@@ -911,6 +976,7 @@ export type Database = {
           numero_aulas?: number | null
           objetivo_geral?: string | null
           objetivos?: string | null
+          planejamento_id?: string | null
           professor?: string | null
           recursos?: string | null
           status?: string
@@ -932,6 +998,13 @@ export type Database = {
             columns: ["duplicado_de"]
             isOneToOne: false
             referencedRelation: "planos_aula"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "planos_aula_planejamento_id_fkey"
+            columns: ["planejamento_id"]
+            isOneToOne: false
+            referencedRelation: "planejamentos_bimestrais"
             referencedColumns: ["id"]
           },
           {

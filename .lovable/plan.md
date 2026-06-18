@@ -1,139 +1,95 @@
-# Agenda Escolar Anual — PEI
+## Planejamento Bimestral — planilha única por bimestre
 
-Construir um módulo único de **Agenda/Calendário** que substitui tabelas externas (Word/planilhas) e integra rotina do professor, agenda da gestão e apoio presencial. Nenhum dado existente é apagado.
+Hoje cada aula é um plano isolado. Vou agrupar tudo num **Planejamento Bimestral** (turma + disciplina + bimestre), exibido como uma planilha editável com uma linha por aula, com autosave, anexos por linha, validação única pela coordenação e PDF em tabela.
 
----
-
-## 1. Modelo de dados (novas tabelas)
-
-### `horario_grade` — grade fixa PEI (compartilhada)
-Blocos pré-configurados de 07:00 às 16:30 (aulas de 50min começando 07:30, mais intervalo, almoço, ATPC, planejamento).
-- `id`, `ordem`, `rotulo` ("1ª aula", "Intervalo", "ATPC"...), `hora_inicio`, `hora_fim`, `tipo` (`aula | intervalo | almoco | planejamento | atpc | reuniao | outro`)
-- Seed automático com a grade PEI padrão.
-
-### `agenda_professor` — rotina semanal fixa de cada professor
-- `user_id`, `dia_semana` (0–6), `horario_grade_id`, `disciplina_id` (nullable), `turma_id` (nullable), `atividade` (texto livre, ex.: "Planejamento"), `cor` (herda da disciplina)
-- Único por (`user_id`, `dia_semana`, `horario_grade_id`)
-- Esta é a fonte do "ano inteiro": o frontend projeta cada (dia_semana, horario) sobre todas as datas do ano letivo.
-
-### `agenda_excecoes` — alterações pontuais ou em sequência futura
-- `user_id`, `data` (date), `horario_grade_id`, `disciplina_id`, `turma_id`, `atividade`, `cancelado` (bool), `observacao`
-- Sobrescreve a rotina fixa apenas naquela data. "Alterar sequência futura" = inserir múltiplas exceções a partir de uma data.
-
-### `agenda_escola_eventos` — agenda geral da escola (gestão)
-- `criado_por`, `titulo`, `descricao`, `tipo` (`reuniao | formacao | evento | avaliacao_externa | conselho | apoio_presencial | acompanhamento | observacao | visita | aviso`), `data_inicio` (timestamptz), `data_fim` (timestamptz), `dia_todo` (bool), `cor`
-- Visível para todos os professores (RLS: SELECT para authenticated; INSERT/UPDATE/DELETE só para `is_gestao`).
-
-### `apoio_presencial` — caso especial de evento
-- `criado_por`, `data`, `horario_grade_id`, `professor_id` (acompanhado), `responsavel_id` (gestão), `observacao`
-- Aparece tanto na agenda da escola quanto na agenda individual do `professor_id`.
-- RLS: gestão CRUD; professor envolvido pode SELECT seus próprios.
-
-### `ano_letivo`
-- `ano` (int), `data_inicio`, `data_fim`, `ativo` (bool)
-- Define o intervalo a projetar nas visões anual/mensal.
-
-GRANTs explícitos para `authenticated` e `service_role` em todas, RLS habilitada com policies acima.
+Nada será apagado: os planos existentes continuam funcionando e podem ser agrupados num planejamento bimestral retroativamente.
 
 ---
 
-## 2. Página `src/pages/Agenda.tsx` (substitui/expande o calendário atual)
+### 1. Banco
 
-Tabs no topo:
-- **Minha Agenda** (professor e gestão)
-- **Agenda da Escola** (todos veem; gestão edita)
-- **Apoio Presencial** (gestão gerencia; professor vê os seus)
-- **Configurar Rotina** (professor define a semana-base uma única vez)
+Migração nova (sem mexer nas tabelas existentes além de adicionar colunas):
 
-Seletor de visualização: **Dia / Semana / Mês / Ano**.
+- **`planejamentos_bimestrais`** (novo): `user_id`, `turma_id`, `disciplina_id`, `bimestre`, `ano`, `status` (`rascunho | aguardando_validacao | validado`), `validado_por`, `validado_em`, `observacao_validacao`. Único por (user_id, turma_id, disciplina_id, bimestre, ano). RLS: professor dono CRUD; gestão SELECT + UPDATE (apenas status/validação).
+- **`planos_aula`**: adicionar `planejamento_id uuid` (FK → planejamentos_bimestrais, nullable). Backfill automático: para cada combinação existente de (user_id, turma_id, disciplina_id, bimestre) cria um planejamento com status `validado` se algum plano daquela combinação já estiver `aprovado`, senão `rascunho`, e liga os planos.
+- **`plano_anexos`**: adicionar `tipo text default 'documento'` (`documento | adaptada`) para separar "Documento da aula" de "Atividade adaptada".
+- GRANTs + RLS completos na nova tabela.
 
-### Visão Semanal (principal)
-Grade tipo planilha: linhas = blocos de `horario_grade`, colunas = seg–sex. Cada célula mostra disciplina + turma com a cor da matéria. Clique abre painel lateral.
+### 2. Página `/plano-aula` (reestruturada)
 
-### Visão Diária
-Lista vertical dos blocos do dia com cards maiores e botões de plano de aula.
+**Lista (entrada do módulo)** — cards agrupados:
 
-### Visão Mensal
-Calendário tradicional com chips coloridos por dia (eventos da escola + apoios presenciais + contagem de aulas).
+```
+1º Bimestre / 2026
+  📘 Química — 1ºA      [12 aulas]  [validado ✓]
+  📕 História — 1ºB     [10 aulas]  [aguardando validação]
+[+ Novo Planejamento Bimestral]
+```
 
-### Visão Anual
-12 mini-meses, destacando feriados, eventos da escola e dias com apoio presencial.
+Filtros por bimestre, disciplina, turma, status. Coordenação vê de todos os professores (com filtro por professor).
 
-### Configurar Rotina (aba dedicada)
-Mesma grade semanal mas em modo de edição: para cada (dia, bloco) o professor escolhe disciplina + turma (selects que puxam de `disciplinas` e `turmas` já cadastradas) ou marca como "Planejamento/ATPC/livre". Salva em `agenda_professor`. Botão "Replicar segunda para todos os dias úteis" como atalho.
+**Criar novo** → diálogo curto: disciplina, turma, bimestre (ano = atual). Cria o registro `planejamentos_bimestrais` e abre a planilha vazia.
 
-### Painel ao clicar numa aula
-Mostra disciplina, turma, horário, data. Botões:
-- **Criar plano de aula** → abre `PlanoAula` pré-preenchido
-- **Ver plano** se existir
-- Badge de status: `sem plano | pendente | aprovado | ajustado` (consulta `planos_aula` por turma+disciplina+data)
-- **Alterar esta aula** (cria exceção da data) / **Alterar a partir desta data** (cria exceções até fim do ano)
+**Planilha (tela principal do planejamento)**:
 
----
+| Data | Dia | Aulas | Aprendizagem essencial | Conteúdo/Objetivo | Desenvolvimento | Recursos | Avaliação | 📎 Documento | 📎 Adaptada | ⋯ |
 
-## 3. Integração com módulos existentes
+- Cada célula de texto é editável inline (`contentEditable`/textarea expansível). Salva sozinho com debounce de 800ms (mostra "salvando…" → "salvo").
+- "Data" abre date picker, "Dia" é calculado.
+- Botão **+ Adicionar aula** abaixo da tabela (uma ou várias datas).
+- Botão **+ Datas em sequência** (escolhe dias da semana e período → cria várias linhas).
+- Ações por linha (menu ⋯): **Duplicar**, **Copiar para baixo** (preenche linhas seguintes com os mesmos valores das colunas selecionadas: metodologia/recursos/avaliação), **Ajustar** (abre o ajuste PDCA existente), **Excluir**.
+- Paste de tabela (Excel/Word) na primeira célula distribui valores nas linhas seguintes.
+- Coluna de anexos: dois botões por linha (📎 documento / 📎 adaptada) com upload direto no bucket `plano-anexos` e badge com contagem.
 
-- **Matérias**: cor do card vem de `disciplinas.cor`.
-- **Turmas**: select de turmas do professor.
-- **Planos de aula**: lookup por `(turma_id, disciplina_id, data)` — link bidirecional.
-- **Sidebar**: item "Agenda" já existe (ou adicionar) apontando para `/agenda`.
+**Cabeçalho da planilha**:
+- Professor, Disciplina, Turma, Bimestre, Status.
+- Botão **Exportar PDF** (tabela paisagem).
+- Para o professor: **Enviar para validação** (muda status para `aguardando_validacao`).
+- Para gestão: **Validar Planejamento** (status → `validado`, salva `validado_por`/`validado_em`) e **Solicitar ajustes** (volta para `rascunho` com observação).
+- Bloqueio: quando `validado`, edição fica travada para o professor (botão "Solicitar reabertura" para gestão destravar).
 
----
+**Visão da coordenação**: mesma planilha em modo leitura, sem aula-por-aula. Cabeçalho mostra professor/disciplina/turma/bimestre e o botão único "Validar Planejamento".
 
-## 4. Permissões
+### 3. PDF
 
-| Ação | Professor | Gestão (coord/direção/vice) | Admin |
+`src/lib/planoPdf.ts` já existe. Adicionar `exportPlanejamentoBimestral(planejamento, linhas)`: paisagem A4, cabeçalho com professor/disciplina/turma/bimestre/status, tabela com todas as colunas, quebra de página automática, ícone indicando anexos por linha.
+
+### 4. Permissões
+
+| Ação | Professor (dono) | Gestão | Admin |
 |---|---|---|---|
-| Ver/editar própria rotina | sim | sim | sim |
-| Ver agenda da escola | sim | sim | sim |
-| Criar evento da escola | não | sim | sim |
-| Criar apoio presencial | não | sim | sim |
-| Ver apoio presencial ligado a si | sim | sim | sim |
-| Ver agenda de outros professores | não | sim (filtros) | sim |
+| Criar/editar planejamento e linhas | sim | não | sim |
+| Anexar arquivos | sim | não | sim |
+| Ajuste PDCA por linha | sim | não | sim |
+| Validar / solicitar ajustes | não | sim | sim |
+| Ver todos | dele | todos | todos |
+| Exportar PDF | sim | sim | sim |
 
----
+### 5. Compatibilidade
 
-## 5. Exportação PDF
-Usar `jsPDF` (já presente) para: agenda semanal do professor, agenda mensal, lista de apoio presencial, lista de eventos. Botão "Exportar PDF" em cada visão.
+- Planos antigos aparecem dentro do planejamento bimestral correspondente (criado pelo backfill).
+- Aprovação antiga aula-por-aula continua funcionando, mas a UI nova trabalha pela validação do planejamento.
+- O link da Agenda para o plano de uma aula específica continua válido (abre a linha correspondente na planilha).
 
----
+### 6. Arquivos
 
-## 6. Detalhes técnicos
-
-- Projeção da rotina: no frontend, dado um intervalo `[inicio, fim]`, iterar dias e mapear `dia_semana` → linhas de `agenda_professor`, sobrescrevendo com `agenda_excecoes` quando houver para aquela data.
-- Sem cron job: tudo é projetado on-demand a partir das duas tabelas.
-- Hook `useAgenda(intervalo)` centraliza fetch + merge.
-- Seed da `horario_grade` PEI feito na própria migration.
-- Seed do `ano_letivo` atual (2026) criado automaticamente.
-
----
-
-## 7. Arquivos a criar/editar
-
-**Migrations (1 só)**: criar tabelas, GRANTs, RLS, policies, seeds.
+**Migração**: criar `planejamentos_bimestrais` + colunas em `planos_aula`/`plano_anexos` + backfill + RLS/GRANTs.
 
 **Novos**:
-- `src/pages/Agenda.tsx`
-- `src/components/agenda/GradeSemanal.tsx`
-- `src/components/agenda/VisaoMensal.tsx`
-- `src/components/agenda/VisaoAnual.tsx`
-- `src/components/agenda/VisaoDiaria.tsx`
-- `src/components/agenda/ConfigurarRotina.tsx`
-- `src/components/agenda/PainelAula.tsx`
-- `src/components/agenda/AgendaEscola.tsx`
-- `src/components/agenda/ApoioPresencial.tsx`
-- `src/hooks/use-agenda.ts`
-- `src/lib/agendaPdf.ts`
+- `src/pages/PlanoAula.tsx` (reescrito; mantém o nome de rota `/plano-aula`)
+- `src/components/plano/ListaPlanejamentos.tsx`
+- `src/components/plano/PlanilhaPlanejamento.tsx`
+- `src/components/plano/CelulaEditavel.tsx`
+- `src/components/plano/AnexosLinha.tsx`
+- `src/hooks/use-planejamento.ts`
 
 **Editados**:
-- `src/App.tsx` (rota `/agenda`)
-- `src/components/Sidebar.tsx` (item Agenda)
+- `src/lib/planoPdf.ts` (nova função)
+- `src/integrations/supabase/types.ts` (auto)
 
----
+### 7. Fora do escopo
+- Não toco em Notas, Agenda, Provas, PDI.
+- Não removo nenhuma coluna existente de `planos_aula`.
 
-## 8. Fora do escopo (avisar)
-- Nenhum dado é apagado.
-- Não troco o módulo de Planos de Aula — apenas integro via links.
-- Feriados nacionais não são importados automaticamente nesta versão (gestão pode lançar como evento "aviso/feriado").
-
-Pronto para implementar?
+Posso começar?
