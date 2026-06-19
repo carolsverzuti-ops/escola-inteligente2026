@@ -21,6 +21,7 @@ import {
   Award,
   ShieldCheck,
   CalendarDays,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -38,6 +39,7 @@ const navProfessor = [
   { label: 'Correção de Provas', icon: ScanLine, path: '/correcao-provas' },
   { label: 'PDI - Evidências', icon: FolderHeart, path: '/pdi-evidencias' },
   { label: 'Prova Paulista', icon: Award, path: '/prova-paulista' },
+  { label: 'Replicabilidade', icon: Sparkles, path: '/replicabilidade' },
   { label: 'Relatórios', icon: BarChart3, path: '/relatorios' },
   { label: 'Configurações', icon: Settings, path: '/configuracoes' },
 ];
@@ -52,6 +54,7 @@ const navGestao = [
   { label: 'Ocorrências', icon: Laptop, path: '/ocorrencias' },
   { label: 'PDI - Evidências', icon: FolderHeart, path: '/pdi-evidencias' },
   { label: 'Prova Paulista', icon: Award, path: '/prova-paulista' },
+  { label: 'Replicabilidade', icon: Sparkles, path: '/replicabilidade' },
   { label: 'Relatórios', icon: BarChart3, path: '/relatorios' },
   { label: 'Configurações', icon: Settings, path: '/configuracoes' },
 ];
