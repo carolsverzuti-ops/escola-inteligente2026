@@ -1106,6 +1106,68 @@ export type Database = {
           },
         ]
       }
+      replicabilidade_fotos: {
+        Row: {
+          created_at: string
+          id: string
+          nome: string | null
+          ordem: number
+          replicabilidade_id: string
+          storage_path: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          nome?: string | null
+          ordem?: number
+          replicabilidade_id: string
+          storage_path: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          nome?: string | null
+          ordem?: number
+          replicabilidade_id?: string
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "replicabilidade_fotos_replicabilidade_id_fkey"
+            columns: ["replicabilidade_id"]
+            isOneToOne: false
+            referencedRelation: "replicabilidades"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      replicabilidades: {
+        Row: {
+          created_at: string
+          descricao: string | null
+          id: string
+          titulo: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          titulo: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          titulo?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       resultados_prova: {
         Row: {
           acertos: number | null
