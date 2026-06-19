@@ -14,6 +14,7 @@ import CorrecaoProvas from "@/pages/CorrecaoProvas";
 import PdiEvidencias from "@/pages/PdiEvidencias";
 import ProvaPaulista from "@/pages/ProvaPaulista";
 import Agenda from "@/pages/Agenda";
+import Replicabilidade from "@/pages/Replicabilidade";
 import Relatorios from "@/pages/Relatorios";
 import Configuracoes from "@/pages/Configuracoes";
 import Materias from "@/pages/Materias";
@@ -80,6 +81,7 @@ function ProtectedRoutes() {
         <Route path="/pdi-evidencias" element={<PdiEvidencias />} />
         <Route path="/prova-paulista" element={<ProvaPaulista />} />
         <Route path="/agenda" element={<Agenda />} />
+        <Route path="/replicabilidade" element={<Replicabilidade />} />
         <Route path="/relatorios" element={<Relatorios />} />
         <Route path="/configuracoes" element={<Configuracoes />} />
         <Route path="/usuarios" element={isAdmin ? <GerenciarUsuarios /> : <Navigate to="/" replace />} />
