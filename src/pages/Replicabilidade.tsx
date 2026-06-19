@@ -56,6 +56,7 @@ export default function Replicabilidade() {
   const [novasFotos, setNovasFotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   // view
   const [viewing, setViewing] = useState<Replic | null>(null);
@@ -357,7 +358,21 @@ export default function Replicabilidade() {
 
             <div className="space-y-2">
               <Label>Fotos</Label>
-              <div className="flex flex-wrap gap-2">
+              <div
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  onPickFiles(e.dataTransfer.files);
+                }}
+                className={`flex flex-wrap gap-2 rounded-lg p-1 transition-colors ${dragOver ? 'bg-primary/10 ring-2 ring-primary ring-offset-2' : ''}`}
+              >
+                {dragOver && (
+                  <div className="w-full text-center text-sm font-medium text-primary py-2">
+                    Solte as imagens aqui para enviar
+                  </div>
+                )}
                 <label className="flex-1 min-w-[160px]">
                   <input
                     type="file" accept="image/*" multiple className="hidden"
@@ -365,8 +380,8 @@ export default function Replicabilidade() {
                   />
                   <div className="cursor-pointer border-2 border-dashed border-input rounded-lg p-4 text-center hover:bg-accent transition-colors flex flex-col items-center gap-1">
                     <Upload className="w-5 h-5 text-muted-foreground" />
-                    <span className="text-sm font-medium">Adicionar fotos</span>
-                    <span className="text-xs text-muted-foreground">do computador</span>
+                    <span className="text-sm font-medium">+ Inserir fotos</span>
+                    <span className="text-xs text-muted-foreground">clique ou arraste imagens</span>
                   </div>
                 </label>
                 <label className="flex-1 min-w-[160px]">
