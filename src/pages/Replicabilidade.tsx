@@ -427,7 +427,9 @@ export default function Replicabilidade() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFormOpen(false)}>Cancelar</Button>
-            <Button onClick={save} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</Button>
+            <Button onClick={save} disabled={saving} size="lg">
+              {saving ? 'Salvando...' : 'Salvar Replicabilidade'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
