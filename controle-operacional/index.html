@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#151922">
+<title>Controle Operacional das Equipes</title>
+<style>
+:root{--bg:#111318;--panel:#1a1f29;--card:#202632;--line:#323a49;--text:#f4f7fb;--muted:#99a5b5;--green:#27a564;--yellow:#d1a62d;--red:#c84e4e;--blue:#6675ff}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+header{position:sticky;top:0;z-index:20;background:#171c25;border-bottom:1px solid #282f3a;padding:12px 14px}
+.wrap{max-width:780px;margin:auto} h1{font-size:16px;margin:0} small,.muted{color:var(--muted)} main{padding:14px 14px 90px;max-width:780px;margin:auto}
+.card,details{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin:10px 0}
+.card{padding:14px} details{overflow:hidden} summary{padding:14px;font-weight:750;cursor:pointer;list-style:none} summary::-webkit-details-marker{display:none}
+.fields{padding:0 12px 10px} .field{display:grid;grid-template-columns:minmax(0,1fr) 34px 64px 34px;gap:7px;align-items:center;padding:10px 0;border-top:1px solid #282f3a}
+.name{font-size:13px} button{cursor:pointer}.step{height:34px;border-radius:9px;border:1px solid var(--line);background:#151a22;color:#fff;font-size:18px}
+.num{height:34px;width:100%;text-align:center;border-radius:9px;border:1px solid var(--line);background:#151a22;color:#fff;font-weight:700}.num.nz{border-color:var(--green)}
+.primary,.secondary,.danger{border:0;border-radius:10px;padding:12px 14px;font-weight:800}.primary{background:var(--green);color:white}.secondary{background:#2a3140;color:#fff}.danger{background:var(--red);color:#fff}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}input,select{width:100%;background:#151a22;border:1px solid var(--line);color:#fff;border-radius:9px;padding:10px}
+.login{max-width:430px;margin:60px auto}.login input{font-size:18px;letter-spacing:1px}.login .primary{width:100%;margin-top:10px}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#183022;color:#70db9a;font-size:11px}.warn{background:#332914;color:#efc85b}.hidden{display:none!important}
+.status-grid{display:grid;gap:7px}.status-row{display:flex;justify-content:space-between;gap:10px;padding:10px;background:#171c25;border:1px solid #2b3340;border-radius:9px}
+.total-row{display:grid;grid-template-columns:1fr 80px;gap:8px;padding:9px 0;border-top:1px solid #282f3a;align-items:center}.val{text-align:center;background:#151a22;border:1px solid var(--line);border-radius:8px;padding:7px;font-weight:800}.val.nz{border-color:var(--green);color:#77e2a5}
+.actions{position:fixed;bottom:0;left:0;right:0;background:#111318ef;padding:10px 14px;border-top:1px solid #282f3a}.actions .wrap{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.topline{display:flex;justify-content:space-between;align-items:center;gap:10px}.topline button{padding:7px 9px}.note{font-size:12px;color:var(--muted);line-height:1.4}.center{text-align:center}
+@media(max-width:520px){.row{grid-template-columns:1fr}.field{grid-template-columns:minmax(0,1fr) 32px 58px 32px}}
+</style>
+</head>
+<body>
+<header><div class="wrap topline"><div><h1>📋 Controle Operacional</h1><small id="who">Acesso interno</small></div><button id="logoutBtn" class="secondary hidden" onclick="logout()">Sair</button></div></header>
+<main>
+<section id="loginView" class="login card">
+<h2 style="margin-top:0">Acessar sistema</h2><p class="note">Digite o código da sua equipe ou o código de administrador.</p><label>Código de acesso</label><input id="codeInput" autocomplete="one-time-code" placeholder="Código"><button class="primary" onclick="login()">Entrar</button><p id="loginMsg" class="note center"></p>
+</section>
+<section id="teamView" class="hidden">
+<div class="card"><div class="row"><div><label>Data do serviço</label><input id="dateTeam" type="date"></div><div><label>Turno</label><select id="shiftTeam"><option>Diurno</option><option>Noturno</option></select></div></div></div>
+<div class="card topline"><div><strong id="teamName"></strong><br><span id="teamState" class="badge">Rascunho</span></div><button class="secondary" onclick="toggleOff()">Não trabalhou</button></div><div id="form"></div>
+</section>
+<section id="adminView" class="hidden">
+<div class="card"><div class="row"><div><label>Data</label><input id="dateAdmin" type="date"></div><div><label>Turno</label><select id="shiftAdmin"><option>Diurno</option><option>Noturno</option></select></div></div></div>
+<div class="card"><strong>Status das equipes</strong><div id="statuses" class="status-grid" style="margin-top:10px"></div></div>
+<div class="card"><label style="display:flex;gap:8px;align-items:center;color:#fff"><input id="onlyNZ" type="checkbox" checked style="width:auto" onchange="renderAdminData()"> Mostrar somente resultados diferentes de zero</label></div><div id="totals"></div><div class="card"><button class="secondary" onclick="copyTotals()">Copiar consolidado</button></div>
+</section>
+</main>
+<div id="teamActions" class="actions hidden"><div class="wrap"><button class="secondary" onclick="save(false)">Salvar rascunho</button><button class="primary" onclick="save(true)">Enviar resultado</button></div></div>
+<script>
+const API="https://kvlofeeoppwmlwaenxel.supabase.co/functions/v1/controle-operacional-api";
+const TEAMS=["CGP","Renivaldo / Gusmão","Tadeu / M. Aurelio","Diego / Paião"];
+const FIELDS={"Atividade Policial":["Pessoas Abordadas","Estabelecimentos Vistoriados","Ocorrências ao DP sem BOPC","BOPM Lavrados","RAIA Lavrados","Mandados Cumpridos","Ato Infracional","Crime (exceto tráfico)","Tráfico de Drogas","Pessoas Presas","Procurados Recapturados","Adolescentes Sindicados","Adolescentes Apreendidos"],"Drogas Apreendidas":["Crack (g)","Cocaína (g)","Maconha (g)","Heroína (g)","Outras Drogas (g)","Outras Drogas (Qtd)"],"Material Bélico":["Arma Permitida","Revólver Restrito","Pistola Restrita","Metralhadora","Fuzil","Outra Arma Restrita","Munição Permitida","Munição Restrita","Outro Material Bélico","Simulacro","Arma Branca","Explosivo"],"Apreensões Diversas":["Moeda","Medicamentos","Cigarros","Eletrônicos","Produtos Químicos","Descaminho","Outras Apreensões"],"Trânsito":["Acidente sem vítima","Acidente com vítima","Vítimas fatais","Vítimas não fatais","Bloqueios","Pontos de Visibilidade","AIT 165","AIT 165-A","AIT 228","AIT 253-A","AIT Outros","Teste Etilômetro","Recusa Teste","Flagrante 306","CLA apreendido","CNH apreendida","Outro Documento","Bicicleta Elétrica Autuada","Autopropelido Autuado","Ciclomotor Autuado","Autuações em Bicicleta Elétrica","Autuações em Autopropelido","Autuações em Ciclomotor"],"Vistorias":["Coletivo","Carro","Moto","Carga","Outros","Bicicleta Elétrica","Autopropelido","Ciclomotor"],"Remoções":["Auto","Moto","Ciclomotor","Coletivo","Carga","Outros","Bicicleta Elétrica","Autopropelido"],"Localizações":["Auto","Moto","Coletivo","Carga","Outros","Bicicleta Elétrica","Autopropelido","Ciclomotor"],"Condutores":["Condutores"]};
+let code=localStorage.getItem("ops_code")||"",me=null,current={values:{},sent:false,offDuty:false,updated:null},adminData=null;
+const today=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10)};
+const blank=()=>{const o={};Object.entries(FIELDS).forEach(([g,a])=>a.forEach(f=>o[g+"||"+f]=0));return o};
+async function req(path,opt={}){const r=await fetch(API+path,{...opt,headers:{"content-type":"application/json","x-ops-code":code,...(opt.headers||{})}});const data=await r.json().catch(()=>({error:"Falha de comunicação"}));if(!r.ok)throw new Error(data.error||"Erro");return data}
+async function login(){loginMsg.textContent="Verificando...";code=codeInput.value.trim();try{me=await req("/me");localStorage.setItem("ops_code",code);openApp()}catch(e){loginMsg.textContent=e.message}}
+async function restore(){if(!code)return;try{me=await req("/me");openApp()}catch(e){localStorage.removeItem("ops_code");code=""}}
+function logout(){localStorage.removeItem("ops_code");location.reload()}
+function openApp(){loginView.classList.add("hidden");logoutBtn.classList.remove("hidden");who.textContent=me.role==="admin"?"Administrador":me.team;if(me.role==="admin"){adminView.classList.remove("hidden");dateAdmin.value=today();dateAdmin.onchange=loadAdmin;shiftAdmin.onchange=loadAdmin;loadAdmin()}else{teamView.classList.remove("hidden");teamActions.classList.remove("hidden");teamName.textContent=me.team;dateTeam.value=today();dateTeam.onchange=loadTeam;shiftTeam.onchange=loadTeam;renderForm();loadTeam()}}
+function renderForm(){form.innerHTML="";Object.entries(FIELDS).forEach(([g,a],i)=>{const d=document.createElement("details");if(i===0)d.open=true;d.innerHTML=`<summary>📋 ${g}</summary>`;const w=document.createElement("div");w.className="fields";a.forEach(f=>{const k=g+"||"+f,v=Number(current.values[k]||0);const r=document.createElement("div");r.className="field";r.innerHTML=`<div class="name">${f}</div><button class="step">−</button><input class="num ${v?"nz":""}" inputmode="decimal" value="${v}"><button class="step">+</button>`;const inp=r.querySelector("input"),bs=r.querySelectorAll("button");const set=v=>{current.values[k]=Math.max(0,Number(v)||0);inp.value=current.values[k];inp.classList.toggle("nz",current.values[k]!==0);current.sent=false;teamState.textContent="Rascunho"};bs[0].onclick=()=>set((Number(inp.value)||0)-1);bs[1].onclick=()=>set((Number(inp.value)||0)+1);inp.onchange=()=>set((inp.value||"0").replace(",","."));w.appendChild(r)});d.appendChild(w);form.appendChild(d)})}
+async function loadTeam(){try{const d=await req(`/load?date=${dateTeam.value}&shift=${encodeURIComponent(shiftTeam.value)}`);current=d.record||{values:blank(),sent:false,offDuty:false,updated:null};if(!current.values)current.values=blank();teamState.textContent=current.offDuty?"Não trabalhou":(current.sent?"Enviado ✓":"Rascunho");renderForm()}catch(e){alert(e.message)}}
+async function save(sent){current.sent=!!sent;current.offDuty=false;current.updated=new Date().toISOString();try{await req("/save",{method:"POST",body:JSON.stringify({date:dateTeam.value,shift:shiftTeam.value,record:current})});teamState.textContent=sent?"Enviado ✓":"Rascunho";alert(sent?"Resultado enviado.":"Rascunho salvo.")}catch(e){alert(e.message)}}
+async function toggleOff(){current={values:blank(),sent:true,offDuty:true,updated:new Date().toISOString()};try{await req("/save",{method:"POST",body:JSON.stringify({date:dateTeam.value,shift:shiftTeam.value,record:current})});teamState.textContent="Não trabalhou";renderForm();alert("Equipe marcada como não trabalhou.")}catch(e){alert(e.message)}}
+async function loadAdmin(){try{adminData=await req(`/consolidated?date=${dateAdmin.value}&shift=${encodeURIComponent(shiftAdmin.value)}`);renderAdminData()}catch(e){alert(e.message)}}
+function renderAdminData(){if(!adminData)return;statuses.innerHTML="";adminData.statuses.forEach(s=>{const d=document.createElement("div");d.className="status-row";d.innerHTML=`<strong>${s.team}</strong><span class="badge ${s.status==="Pendente"?"warn":""}">${s.status}</span>`;statuses.appendChild(d)});totals.innerHTML="";const only=onlyNZ.checked;Object.entries(FIELDS).forEach(([g,a])=>{const vis=a.filter(f=>!only||Number(adminData.totals[g+"||"+f]||0)!==0);if(!vis.length)return;const d=document.createElement("details");d.open=true;d.innerHTML=`<summary>📊 ${g}</summary>`;const w=document.createElement("div");w.className="fields";vis.forEach(f=>{const v=adminData.totals[g+"||"+f]||0,r=document.createElement("div");r.className="total-row";r.innerHTML=`<div class="name">${f}</div><div class="val ${v?"nz":""}">${v}</div>`;w.appendChild(r)});d.appendChild(w);totals.appendChild(d)});if(!totals.children.length)totals.innerHTML='<div class="card center muted">Ainda não há resultados neste turno.</div>'}
+function copyTotals(){if(!adminData)return;let t=[`CONSOLIDADO - ${dateAdmin.value} - ${shiftAdmin.value}`];Object.entries(FIELDS).forEach(([g,a])=>{let rows=a.map(f=>[f,adminData.totals[g+"||"+f]||0]).filter(x=>Number(x[1])!==0);if(rows.length){t.push("\n"+g);rows.forEach(x=>t.push(x[0]+": "+x[1]))}});navigator.clipboard.writeText(t.join("\n")).then(()=>alert("Consolidado copiado."))}
+restore();
+</script>
+</body></html>
